@@ -28,16 +28,19 @@ class _InputBarState extends State<InputBar> {
     
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
-      width: _isExpanded ? 300 : 60,
+      // Aumentamos a largura base para caber os dois ícones com conforto
+      width: _isExpanded ? 350 : 120, 
       height: 60,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: Colors.cyan.withOpacity(0.2),
+        color: Colors.cyan.withOpacity(0.15),
         borderRadius: BorderRadius.circular(30),
-        border: Border.all(color: Colors.cyanAccent.withOpacity(0.5)),
+        border: Border.all(color: Colors.cyanAccent.withOpacity(0.4)),
       ),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          // Botão de Microfone
           IconButton(
             icon: Icon(
               state.isListening ? Icons.stop : Icons.mic, 
@@ -47,23 +50,35 @@ class _InputBarState extends State<InputBar> {
               state.toggleListening();
             },
           ),
-          const Spacer(),
+          
+          // Espaçamento interno quando não expandido
+          if (!_isExpanded) const SizedBox(width: 8),
+
+          // Campo de Texto (Só aparece quando expandido)
           if (_isExpanded)
             Expanded(
-              flex: 10,
-              child: TextField(
-                controller: _controller,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  hintText: "Digite algo...",
-                  hintStyle: TextStyle(color: Colors.white54),
-                  border: InputBorder.none,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                child: TextField(
+                  controller: _controller,
+                  autofocus: true,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    hintText: "Fale comigo...",
+                    hintStyle: TextStyle(color: Colors.white38),
+                    border: InputBorder.none,
+                  ),
+                  onSubmitted: (_) => _handleSend(),
                 ),
-                onSubmitted: (_) => _handleSend(),
               ),
             ),
+
+          // Botão de Teclado / Enviar
           IconButton(
-            icon: Icon(_isExpanded ? Icons.send : Icons.keyboard, color: Colors.cyanAccent),
+            icon: Icon(
+              _isExpanded ? Icons.send : Icons.keyboard, 
+              color: Colors.cyanAccent
+            ),
             onPressed: () {
               if (!_isExpanded) {
                 setState(() => _isExpanded = true);
