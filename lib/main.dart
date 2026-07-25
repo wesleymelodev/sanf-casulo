@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'providers/robot_state.dart';
@@ -20,6 +21,12 @@ void main() async {
       measurementId: "G-TKS7B5PCQM",
     ),
   );
+  // Tenta carregar o .env, se falhar (ex: em produção), ignora silenciosamente
+  try {
+    await dotenv.load(fileName: ".env");
+  } catch (e) {
+    debugPrint("Arquivo .env não encontrado. Usando variáveis de ambiente.");
+  }
   runApp(
     ChangeNotifierProvider(
       create: (_) => RobotState(),

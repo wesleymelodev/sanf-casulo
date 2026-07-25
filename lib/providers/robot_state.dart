@@ -56,38 +56,77 @@ class RobotState extends ChangeNotifier {
 
   void _handleWebSocketMessage(dynamic message) {
     try {
-      final data = jsonDecode(message);
-      final event = data['type'];
-      final payload = data['payload'];
+      // 1. Decodifica a mensagem JSON vinda do Python
+      final Map<String, dynamic> response = jsonDecode(message);
 
-      switch (event) {
+      // 2. No Python, usamos a chave "name" para o tipo do evento
+      final String eventName = response['name'] ?? '';
+
+      // 3. No Python, o conteúdo está na chave "data"
+      final dynamic rawData = response['data'];
+
+      debugPrint("Recebido evento: $eventName");
+
+      switch (eventName) {
         case 'system.homeostasis.changed':
-          homeostaticMode = payload['mode'] ?? homeostaticMode;
-          energy = (payload['energy'] ?? 100) / 100.0;
+          if (rawData is Map) {
+            // O Python envia 'balanced', 'protective', etc.
+            String mode = rawData['mode']?.toString() ?? "balanced";
+
+            // Tradução simples para o seu StatusPanel (ou use os termos em inglês lá)
+            if (mode == 'balanced') homeostaticMode = "Equilibrado";
+            else if (mode == 'protective') homeostaticMode = "Protetor";
+            else if (mode == 'restorative') homeostaticMode = "Regenerativo";
+            else homeostaticMode = mode;
+
+            // No Python, os valores já são 0.0 a 1.0
+            energy = (rawData['energy'] ?? 1.0).toDouble();
+            cognitiveLoad = (rawData['cognitive_load'] ?? 0.0).toDouble();
+
+            debugPrint("Homeostase atualizada: Energia $energy, Modo $homeostaticMode");
+          }
           notifyListeners();
           break;
+
         case 'attention.focus.changed':
-          attentionFocus = payload['focus'] ?? attentionFocus;
-          isAlert = payload['urgency'] == 'high';
+          if (rawData is Map) {
+            // No Python, o dado está em data -> item -> event -> data
+            var focusData = rawData['item']?['event']?['data'];
+            attentionFocus = focusData?.toString() ?? "Em reflexão";
+
+            // Se for um foco de alta prioridade (> 0.8), marca como alerta
+            double priority = (rawData['item']?['event']?['priority'] ?? 0.0).toDouble();
+            isAlert = priority > 0.8;
+          }
           notifyListeners();
           break;
+
         case 'cognition.response':
-          addMessage("SANF", payload['text']);
+        // O dado aqui é a string direta da resposta
+          String text = rawData.toString();
+          addMessage("SANF", text);
           isSpeaking = true;
           notifyListeners();
-          // Simulate speaking end after some time
-          Future.delayed(Duration(seconds: 3), () {
+
+          // Calcula tempo de fala baseado no tamanho do texto (aprox 15 caracteres por segundo)
+          int duration = (text.length / 15).clamp(3, 15).toInt();
+          Future.delayed(Duration(seconds: duration), () {
             isSpeaking = false;
             notifyListeners();
           });
           break;
-        case 'status.update':
-          cognitiveLoad = (payload['load'] ?? 0) / 100.0;
+
+        case 'system.metrics.updated':
+          if (rawData is Map) {
+            // Opcional: usar a pressão da fila para carga cognitiva visual
+            int pending = rawData['queue_pressure'] ?? 0;
+            cognitiveLoad = (pending / 50.0).clamp(0.0, 1.0);
+          }
           notifyListeners();
           break;
       }
     } catch (e) {
-      debugPrint("Error parsing WS message: $e");
+      debugPrint("Erro ao processar mensagem do WebSocket: $e");
     }
   }
 

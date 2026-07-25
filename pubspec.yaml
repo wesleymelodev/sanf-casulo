@@ -37,6 +37,7 @@ dependencies:
   provider: ^6.1.2
   speech_to_text: ^7.3.0
   cupertino_icons: ^1.0.8
+  flutter_dotenv: ^5.1.0
 
 dev_dependencies:
   flutter_test:

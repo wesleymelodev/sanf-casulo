@@ -1,3 +1,4 @@
+// status_panel.dart
 import 'package:flutter/material.dart';
 
 class StatusPanel extends StatelessWidget {
@@ -53,9 +54,9 @@ class StatusPanel extends StatelessWidget {
 
   Color _getModeColor(String mode) {
     switch (mode.toLowerCase()) {
-      case 'equilibrado': return Colors.greenAccent;
-      case 'protetor': return Colors.orangeAccent;
-      case 'regenerativo': return Colors.blueAccent;
+      case 'balanced': case 'equilibrado': return Colors.greenAccent;
+      case 'protective': case 'protetor': return Colors.orangeAccent;
+      case 'restorative': case 'regenerativo': return Colors.blueAccent;
       default: return Colors.white;
     }
   }
