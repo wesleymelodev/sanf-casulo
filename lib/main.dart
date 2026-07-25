@@ -1,32 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'providers/robot_state.dart';
 import 'widgets/robot_eyes.dart';
 import 'widgets/robot_mouth.dart';
-import 'widgets/status_panel.dart';
 import 'widgets/input_bar.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: const FirebaseOptions(
-      apiKey: "AIzaSyD6vFYYAP42Lp2_kE7vRDWuffdlI_dp0Ro",
-      authDomain: "sanf-casulo.firebaseapp.com",
-      projectId: "sanf-casulo",
-      storageBucket: "sanf-casulo.firebasestorage.app",
-      messagingSenderId: "72454618080",
-      appId: "1:72454618080:web:3adc3d7d613e81a2414985",
-      measurementId: "G-TKS7B5PCQM",
-    ),
-  );
-  // Tenta carregar o .env, se falhar (ex: em produção), ignora silenciosamente
-  try {
-    await dotenv.load(fileName: ".env");
-  } catch (e) {
-    debugPrint("Arquivo .env não encontrado. Usando variáveis de ambiente.");
-  }
   runApp(
     ChangeNotifierProvider(
       create: (_) => RobotState(),
@@ -41,11 +21,11 @@ class SANF extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'SANF Casulo',
+      title: 'SANF Desktop',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF00050A), // Deep Black
+        scaffoldBackgroundColor: const Color(0xFF00050A),
         useMaterial3: true,
       ),
       home: const ShellPage(),
@@ -66,13 +46,13 @@ class ShellPage extends StatelessWidget {
           // Background Glow
           Center(
             child: Container(
-              width: 400,
-              height: 400,
+              width: 500,
+              height: 500,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    Colors.cyan.withOpacity(0.1),
+                    Colors.cyan.withOpacity(0.05),
                     Colors.transparent,
                   ],
                 ),
@@ -84,47 +64,46 @@ class ShellPage extends StatelessWidget {
           Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              RobotEyes(
-                energy: state.energy,
-                isAlert: state.isAlert,
+              Center(
+                child: RobotEyes(
+                  energy: state.energy,
+                  isAlert: state.isAlert,
+                  cognitiveLoad: state.cognitiveLoad,
+                  attentionFocus: state.attentionFocus,
+                ),
               ),
-              const SizedBox(height: 40),
-              RobotMouth(isSpeaking: state.isSpeaking),
+              const SizedBox(height: 10),
+              Center(
+                child: RobotMouth(isSpeaking: state.isSpeaking),
+              )
             ],
           ),
 
-          // Status Panel (Top Left)
-          Positioned(
-            top: 40,
-            left: 20,
-            child: StatusPanel(
-              cognitiveLoad: state.cognitiveLoad,
-              homeostaticMode: state.homeostaticMode,
-              attentionFocus: state.attentionFocus,
-            ),
-          ),
+          // Metrics and Status (Overlay)
+          _buildMetricsOverlay(state),
 
-          // Chat Overlay (Optional/Minimal)
+          // Chat Overlay
           if (state.chatHistory.isNotEmpty)
             Positioned(
-              bottom: 120,
-              left: 20,
-              right: 20,
+              bottom: 130,
+              left: 50,
+              right: 50,
               child: Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.black45,
-                  borderRadius: BorderRadius.circular(8),
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.cyanAccent.withOpacity(0.2)),
                 ),
                 child: Text(
                   state.chatHistory.last['text'] ?? "",
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.cyanAccent, fontSize: 18),
+                  style: const TextStyle(color: Colors.cyanAccent, fontSize: 20),
                 ),
               ),
             ),
 
-          // Input Bar (Bottom Center)
+          // Input Bar
           Positioned(
             bottom: 40,
             left: 0,
@@ -137,6 +116,63 @@ class ShellPage extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildMetricsOverlay(RobotState state) {
+    return Positioned(
+      top: 40,
+      left: 20,
+      right: 20,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Left Side: Energy and Mode
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _metricBar("ENERGIA", state.energy, Colors.greenAccent),
+              const SizedBox(height: 10),
+              Text(
+                state.homeostaticMode.toUpperCase(),
+                style: const TextStyle(color: Colors.cyanAccent, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 2),
+              ),
+            ],
+          ),
+          // Right Side: Cognitive Load and Focus
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              _metricBar("CARGA COGNITIVA", state.cognitiveLoad, Colors.orangeAccent),
+              const SizedBox(height: 10),
+              Text(
+                state.attentionFocus.toUpperCase(),
+                style: const TextStyle(color: Colors.yellowAccent, fontSize: 10, letterSpacing: 1.5),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _metricBar(String label, double value, Color color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 9, color: Colors.white38)),
+        const SizedBox(height: 4),
+        Container(
+          width: 150,
+          height: 4,
+          decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(2)),
+          child: FractionallySizedBox(
+            alignment: Alignment.centerLeft,
+            widthFactor: value.clamp(0.0, 1.0),
+            child: Container(decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
+          ),
+        ),
+      ],
     );
   }
 }
