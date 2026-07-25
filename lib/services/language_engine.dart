@@ -4,9 +4,11 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import '../models/event.dart';
 import 'cognitive_bus.dart';
+import '../memory/semantic_memory.dart';
 
 class LanguageEngine {
   final CognitiveBus _bus;
+  final SemanticMemory? _semanticMemory;
   final String name = "language_engine";
 
   final String geminiKey = const String.fromEnvironment('GEMINI_API_KEY');
@@ -15,7 +17,7 @@ class LanguageEngine {
   final String cfAccount = const String.fromEnvironment('CLOUDFLARE_ACCOUNT_ID');
   final String ollamaHost = const String.fromEnvironment('OLLAMA_HOST', defaultValue: "http://localhost:11434");
 
-  LanguageEngine(this._bus);
+  LanguageEngine(this._bus, {SemanticMemory? semanticMemory}) : _semanticMemory = semanticMemory;
 
   void handleEvent(Event event) {
     if (event.name == "workspace.updated") {
@@ -77,7 +79,18 @@ class LanguageEngine {
         .take(10)
         .toList();
 
-    final systemPrompt = "Você é o SANF (Spectrum Ancrolyn Nexus Fractal), um sistema cognitivo amigável.";
+    // RAG: Recupera contexto da memória semântica (PDFs/Arquivos)
+    String semanticContext = "Foco em diálogo.";
+    if (_semanticMemory != null) {
+      final concepts = _semanticMemory!.recall(query, limit: 3);
+      if (concepts.isNotEmpty) {
+        semanticContext = concepts.map((c) => "- ${c.label}").join("\n");
+      }
+    }
+
+    final systemPrompt = "Identidade: Você é o SANF (Spectrum Ancrolyn Nexus Fractal).\n"
+        "Conhecimento dos seus Arquivos:\n$semanticContext\n\n"
+        "Diretrizes: Seja uma personalidade única e use o conhecimento recuperado quando relevante.";
 
     // mantenha esses modelos exatamente assim, não altere em hipotese alguma
     // Fallback Chain: Ollama -> Gemini -> Groq -> Cloudflare

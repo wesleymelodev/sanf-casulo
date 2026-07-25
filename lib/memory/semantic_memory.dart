@@ -53,7 +53,9 @@ class SemanticMemory extends LifecycleComponent {
 
   void _loadFromStorage() {
     for (var key in _box.keys) {
-      final data = Map<String, dynamic>.from(_box.get(key));
+      final rawData = _box.get(key);
+      if (rawData == null) continue;
+      final data = Map<String, dynamic>.from(rawData);
       final concept = SemanticConcept(
         identifier: data['identifier'],
         label: data['label'],
@@ -63,6 +65,31 @@ class SemanticMemory extends LifecycleComponent {
       );
       _concepts[concept.identifier] = concept;
     }
+  }
+
+  List<SemanticConcept> recall(String query, {int limit = 5}) {
+    final terms = query.toLowerCase().split(RegExp(r'\W+')).where((t) => t.isNotEmpty).toSet();
+    
+    final ranked = _concepts.values.toList();
+    ranked.sort((a, b) {
+      double scoreA = _calculateRelevance(a, terms);
+      double scoreB = _calculateRelevance(b, terms);
+      return scoreB.compareTo(scoreA);
+    });
+
+    return ranked.take(limit).toList();
+  }
+
+  double _calculateRelevance(SemanticConcept concept, Set<String> queryTerms) {
+    if (queryTerms.isEmpty) return concept.confidence;
+    
+    final conceptTerms = concept.label.toLowerCase().split(RegExp(r'\W+')).toSet();
+    final intersection = queryTerms.intersection(conceptTerms);
+    
+    double overlap = intersection.length / queryTerms.length;
+    double evidenceFactor = (concept.evidenceCount / 5).clamp(0.0, 1.0);
+    
+    return (0.55 * overlap) + (0.30 * concept.confidence) + (0.15 * evidenceFactor);
   }
 
   void handleEvent(Event event) {

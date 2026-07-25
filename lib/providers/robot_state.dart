@@ -21,6 +21,7 @@ import '../cognition/reasoning.dart';
 import '../cognition/response_generator.dart';
 import '../system/homeostasis.dart';
 import '../system/metrics.dart';
+import '../system/knowledge_importer.dart';
 
 class RobotState extends ChangeNotifier {
   // --- UI Reactive States ---
@@ -52,6 +53,7 @@ class RobotState extends ChangeNotifier {
   late final ResponseGenerator responseGenerator;
   late final Homeostasis homeostasis;
   late final Metrics metrics;
+  late final KnowledgeImporter knowledgeImporter;
   
   final FlutterTts tts = FlutterTts();
   final SpeechToText stt = SpeechToText();
@@ -79,13 +81,15 @@ class RobotState extends ChangeNotifier {
     attention = AttentionController(bus);
     associativeEngine = AssociativeEngine(bus);
     reasoning = ReasoningEngine(bus);
-    languageEngine = LanguageEngine(bus);
+    semanticMemory = SemanticMemory(bus);
+    languageEngine = LanguageEngine(bus, semanticMemory: semanticMemory);
     proactivityEngine = ProactivityEngine(bus, proactivityLevel: 0.6);
     responseGenerator = ResponseGenerator(bus);
 
     // 4. System & Metrics
     homeostasis = Homeostasis(bus);
     metrics = Metrics(bus);
+    knowledgeImporter = KnowledgeImporter(bus);
 
     // Register all in Kernel
     kernel.register(scheduler);
@@ -101,6 +105,7 @@ class RobotState extends ChangeNotifier {
     kernel.register(responseGenerator);
     kernel.register(homeostasis);
     kernel.register(metrics);
+    kernel.register(knowledgeImporter);
 
     // Initializations
     await Hive.initFlutter();
