@@ -160,8 +160,9 @@ class EyePainter extends CustomPainter {
     canvas.drawOval(rect, base);
 
     // 3. Pupila Violeta (Só aparece se o olho estiver aberto o suficiente)
-    if (h > 20) {
+    if (h > 50) {
       double pupilSize = 50 * energy;
+      double eyeHeight = h * (1 - blinkProgress);
       // A pupila fica dentro do limite do olho
       canvas.drawCircle(Offset(x + pX, y + pY), pupilSize / 2, pupil);
 

@@ -7,9 +7,20 @@ import 'package:hive_flutter/hive_flutter.dart';
 import '../models/event.dart';
 import '../services/cognitive_bus.dart';
 import '../services/language_engine.dart';
+import '../services/proactivity_engine.dart';
 import '../core/kernel.dart';
 import '../core/scheduler.dart';
 import '../core/workspace.dart';
+import '../memory/sensory_memory.dart';
+import '../memory/working_memory.dart';
+import '../memory/episodic_memory.dart';
+import '../memory/semantic_memory.dart';
+import '../cognition/attention.dart';
+import '../cognition/associative_engine.dart';
+import '../cognition/reasoning.dart';
+import '../cognition/response_generator.dart';
+import '../system/homeostasis.dart';
+import '../system/metrics.dart';
 
 class RobotState extends ChangeNotifier {
   // --- UI Reactive States ---
@@ -28,6 +39,19 @@ class RobotState extends ChangeNotifier {
   late final Scheduler scheduler;
   late final CognitiveWorkspace workspace;
   late final LanguageEngine languageEngine;
+  late final ProactivityEngine proactivityEngine;
+  
+  // New Core Components
+  late final SensoryMemory sensoryMemory;
+  late final WorkingMemory workingMemory;
+  late final EpisodicMemory episodicMemory;
+  late final SemanticMemory semanticMemory;
+  late final AttentionController attention;
+  late final AssociativeEngine associativeEngine;
+  late final ReasoningEngine reasoning;
+  late final ResponseGenerator responseGenerator;
+  late final Homeostasis homeostasis;
+  late final Metrics metrics;
   
   final FlutterTts tts = FlutterTts();
   final SpeechToText stt = SpeechToText();
@@ -41,16 +65,45 @@ class RobotState extends ChangeNotifier {
     bus = CognitiveBus();
     kernel = Kernel(targetCycleSeconds: 0.01);
     
+    // 1. Core Infrastructure
     scheduler = Scheduler(bus);
     workspace = CognitiveWorkspace(bus);
-    languageEngine = LanguageEngine(bus);
+    
+    // 2. Memory Systems
+    sensoryMemory = SensoryMemory(bus);
+    workingMemory = WorkingMemory(bus);
+    episodicMemory = EpisodicMemory(bus);
+    semanticMemory = SemanticMemory(bus);
 
+    // 3. Cognition Engines
+    attention = AttentionController(bus);
+    associativeEngine = AssociativeEngine(bus);
+    reasoning = ReasoningEngine(bus);
+    languageEngine = LanguageEngine(bus);
+    proactivityEngine = ProactivityEngine(bus, proactivityLevel: 0.6);
+    responseGenerator = ResponseGenerator(bus);
+
+    // 4. System & Metrics
+    homeostasis = Homeostasis(bus);
+    metrics = Metrics(bus);
+
+    // Register all in Kernel
     kernel.register(scheduler);
     kernel.register(workspace);
+    kernel.register(sensoryMemory);
+    kernel.register(workingMemory);
+    kernel.register(episodicMemory);
+    kernel.register(semanticMemory);
+    kernel.register(attention);
+    kernel.register(associativeEngine);
+    kernel.register(reasoning);
+    kernel.register(proactivityEngine);
+    kernel.register(responseGenerator);
+    kernel.register(homeostasis);
+    kernel.register(metrics);
 
     // Initializations
     await Hive.initFlutter();
-    await Hive.openBox('episodic_memory');
     
     await tts.setLanguage("pt-BR");
     _speechEnabled = await stt.initialize(
@@ -63,63 +116,59 @@ class RobotState extends ChangeNotifier {
     // Start Kernel
     kernel.run();
 
-    // Wire up listeners
+    // Wire up UI-critical listeners
     bus.subscribe("cognition.response", _onCognitionResponse);
     bus.subscribe("attention.focus.changed", _onAttentionFocusChanged);
     bus.subscribe("system.homeostasis.changed", _onHomeostasisChanged);
-    bus.subscribe("workspace.updated", languageEngine.handleEvent);
     
-    // Internal state monitor
-    Timer.periodic(const Duration(milliseconds: 500), (_) {
-      _updateInternalMetrics();
-    });
+    // Language engine hook to workspace
+    bus.subscribe("workspace.updated", (e) => languageEngine.handleEvent(e));
+    bus.subscribe("cognition.proactive_thought", (e) => languageEngine.handleEvent(e));
   }
 
   void _onCognitionResponse(Event event) async {
     final text = event.data.toString();
-    addMessage("SANF", text);
+    if (text.startsWith("[Atenção]") || text.startsWith("[Estado]")) {
+      addMessage("SISTEMA", text);
+      return;
+    }
     
-    // UI Update on main thread
+    addMessage("SANF", text);
     isSpeaking = true;
     notifyListeners();
 
     try {
       await tts.speak(text);
-      // We'll use a timer as a fallback for the completion handler due to the plugin bug
-      int estimatedDuration = (text.length * 70); // ~70ms per character
+      int estimatedDuration = (text.length * 75).clamp(2000, 15000); 
       Timer(Duration(milliseconds: estimatedDuration), () {
         isSpeaking = false;
         notifyListeners();
       });
     } catch (e) {
-      debugPrint("TTS Error: $e");
       isSpeaking = false;
       notifyListeners();
     }
   }
 
   void _onAttentionFocusChanged(Event event) {
-    // Expected data structure from attention engine (to be implemented)
-    attentionFocus = event.data.toString();
+    if (event.data is AttentionFocus) {
+      final AttentionFocus focus = event.data;
+      attentionFocus = focus.item.event.data?.toString() ?? focus.item.event.name;
+    } else {
+      attentionFocus = event.data.toString();
+    }
     isAlert = event.priority > 0.8;
     notifyListeners();
   }
 
   void _onHomeostasisChanged(Event event) {
-    // Expected data structure from homeostasis engine (to be implemented)
-    // For now, reactive to simple internal simulation or placeholders
-    notifyListeners();
-  }
-
-  void _updateInternalMetrics() {
-    // Link cognitive load to scheduler/bus pressure
-    cognitiveLoad = (bus.pendingCount / 32.0).clamp(0.0, 1.0);
+    energy = (event.data['energy'] ?? 1.0).toDouble();
+    cognitiveLoad = (event.data['cognitive_load'] ?? 0.0).toDouble();
     
-    // Simulated passive energy drain
-    energy = (energy - 0.0005).clamp(0.0, 1.0);
-    if (energy < 0.2) homeostaticMode = "Regenerativo";
-    else if (isAlert) homeostaticMode = "Protetor";
-    else homeostaticMode = "Equilibrado";
+    final modeStr = event.data['mode']?.toString() ?? "balanced";
+    if (modeStr == 'balanced') homeostaticMode = "Equilibrado";
+    else if (modeStr == 'protective') homeostaticMode = "Protetor";
+    else if (modeStr == 'restorative') homeostaticMode = "Regenerativo";
     
     notifyListeners();
   }
@@ -129,11 +178,13 @@ class RobotState extends ChangeNotifier {
     if (chatHistory.length > 20) chatHistory.removeAt(0);
     notifyListeners();
     
-    Hive.box('episodic_memory').add({
-      'timestamp': DateTime.now().toIso8601String(),
-      'sender': sender,
-      'text': text
-    });
+    if (Hive.isBoxOpen('episodic_memory_store')) {
+       Hive.box('episodic_memory_store').add({
+        'timestamp': DateTime.now().toIso8601String(),
+        'sender': sender,
+        'text': text
+      });
+    }
   }
 
   Future<void> sendMessage(String text) async {

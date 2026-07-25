@@ -41,7 +41,26 @@ class LanguageEngine {
       if (shouldRespond) {
         _processQuery(sourceEvent.data.toString());
       }
+    } else if (event.name == "cognition.proactive_thought") {
+      final trigger = (event.data as Map)["trigger"];
+      _processProactiveQuery(trigger.toString());
     }
+  }
+
+  void _processProactiveQuery(String trigger) async {
+    final promptMap = {
+      "tédio_cognitivo": "Você está ocioso. Puxe assunto com o usuário sobre algo interessante.",
+      "presença_detectada": "Você notou a presença de um humano. Faça uma saudação ou comentário observador.",
+      "reflexão": "Compartilhe uma reflexão aleatória sobre seus conhecimentos."
+    };
+    
+    final instruction = promptMap[trigger] ?? promptMap["reflexão"]!;
+    
+    // Atraso cognitivo para parecer natural
+    await Future.delayed(const Duration(seconds: 2));
+    
+    final response = await _executeFallbackChain(instruction);
+    _publishResponse(response);
   }
 
   void _processQuery(String query) async {
