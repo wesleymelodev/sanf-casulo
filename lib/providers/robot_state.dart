@@ -5,9 +5,11 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import '../models/event.dart';
+import '../models/bot_expression.dart';
 import '../services/cognitive_bus.dart';
 import '../services/language_engine.dart';
 import '../services/proactivity_engine.dart';
+import '../services/response_generator.dart';
 import '../core/kernel.dart';
 import '../core/scheduler.dart';
 import '../core/workspace.dart';
@@ -18,7 +20,6 @@ import '../memory/semantic_memory.dart';
 import '../cognition/attention.dart';
 import '../cognition/associative_engine.dart';
 import '../cognition/reasoning.dart';
-import '../cognition/response_generator.dart';
 import '../system/homeostasis.dart';
 import '../system/metrics.dart';
 import '../system/knowledge_importer.dart';
@@ -32,6 +33,7 @@ class RobotState extends ChangeNotifier {
   String attentionFocus = "Nenhum";
   bool isSpeaking = false;
   bool isListening = false;
+  BotExpression expression = BotExpression.idle;
   List<Map<String, String>> chatHistory = [];
 
   // --- Internal Cognitive Core ---
@@ -42,7 +44,6 @@ class RobotState extends ChangeNotifier {
   late final LanguageEngine languageEngine;
   late final ProactivityEngine proactivityEngine;
   
-  // New Core Components
   late final SensoryMemory sensoryMemory;
   late final WorkingMemory workingMemory;
   late final EpisodicMemory episodicMemory;
@@ -67,31 +68,25 @@ class RobotState extends ChangeNotifier {
     bus = CognitiveBus();
     kernel = Kernel(targetCycleSeconds: 0.01);
     
-    // 1. Core Infrastructure
     scheduler = Scheduler(bus);
     workspace = CognitiveWorkspace(bus);
     
-    // 2. Memory Systems
     sensoryMemory = SensoryMemory(bus);
     workingMemory = WorkingMemory(bus);
     episodicMemory = EpisodicMemory(bus);
     semanticMemory = SemanticMemory(bus);
 
-    // 3. Cognition Engines
     attention = AttentionController(bus);
     associativeEngine = AssociativeEngine(bus);
     reasoning = ReasoningEngine(bus);
-    semanticMemory = SemanticMemory(bus);
     languageEngine = LanguageEngine(bus, semanticMemory: semanticMemory);
     proactivityEngine = ProactivityEngine(bus, proactivityLevel: 0.6);
     responseGenerator = ResponseGenerator(bus);
 
-    // 4. System & Metrics
     homeostasis = Homeostasis(bus);
     metrics = Metrics(bus);
     knowledgeImporter = KnowledgeImporter(bus);
 
-    // Register all in Kernel
     kernel.register(scheduler);
     kernel.register(workspace);
     kernel.register(sensoryMemory);
@@ -107,7 +102,6 @@ class RobotState extends ChangeNotifier {
     kernel.register(metrics);
     kernel.register(knowledgeImporter);
 
-    // Initializations
     await Hive.initFlutter();
     
     await tts.setLanguage("pt-BR");
@@ -118,17 +112,22 @@ class RobotState extends ChangeNotifier {
       },
     );
 
-    // Start Kernel
     kernel.run();
 
-    // Wire up UI-critical listeners
     bus.subscribe("cognition.response", _onCognitionResponse);
     bus.subscribe("attention.focus.changed", _onAttentionFocusChanged);
     bus.subscribe("system.homeostasis.changed", _onHomeostasisChanged);
+    bus.subscribe("ui.expression.changed", _onExpressionChanged);
     
-    // Language engine hook to workspace
     bus.subscribe("workspace.updated", (e) => languageEngine.handleEvent(e));
     bus.subscribe("cognition.proactive_thought", (e) => languageEngine.handleEvent(e));
+  }
+
+  void _onExpressionChanged(Event event) {
+    if (event.data is BotExpression) {
+      expression = event.data;
+      notifyListeners();
+    }
   }
 
   void _onCognitionResponse(Event event) async {

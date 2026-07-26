@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/robot_state.dart';
-import 'widgets/robot_eyes.dart';
+import 'widgets/robot_face.dart';
 import 'widgets/robot_mouth.dart';
 import 'widgets/input_bar.dart';
 
@@ -60,22 +60,20 @@ class ShellPage extends StatelessWidget {
             ),
           ),
           
-          // Main Face Components
+          // Main Face Components: mantenha no centro da tela com Center.
           Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Center(
-                child: RobotEyes(
+                child: RobotFace(
+                  expression: state.expression,
                   energy: state.energy,
-                  isAlert: state.isAlert,
-                  cognitiveLoad: state.cognitiveLoad,
-                  attentionFocus: state.attentionFocus,
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 20),
               Center(
                 child: RobotMouth(isSpeaking: state.isSpeaking),
-              )
+              ),
             ],
           ),
 
