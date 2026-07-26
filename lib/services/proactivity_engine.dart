@@ -80,7 +80,7 @@ class ProactivityEngine extends LifecycleComponent {
 
   void _resetIdleThreshold() {
     // Base: 300 segundos (5 min). Varia com o nível e um fator random.
-    double base = 300 / (proactivityLevel + 0.1);
+    double base = 86400 / (proactivityLevel + 0.1);
     // Adiciona uma variação aleatória de +/- 30% para não ser robótico
     double variance = (base * 0.3) * (_random.nextDouble() * 2 - 1);
     _currentIdleThreshold = base + variance;
