@@ -26,6 +26,7 @@ import '../system/metrics.dart';
 import '../system/knowledge_importer.dart';
 import '../system/audio_sensor.dart';
 import '../system/curiosity_sensor.dart';
+import '../system/vision_sensor.dart';
 
 class RobotState extends ChangeNotifier {
   // --- UI Reactive States ---
@@ -60,6 +61,7 @@ class RobotState extends ChangeNotifier {
   late final KnowledgeImporter knowledgeImporter;
   late final AudioSensor audioSensor;
   late final CuriositySensor curiositySensor;
+  late final VisionSensor visionSensor;
   
   final FlutterTts tts = FlutterTts();
   final SpeechToText stt = SpeechToText();
@@ -93,6 +95,7 @@ class RobotState extends ChangeNotifier {
     knowledgeImporter = KnowledgeImporter(bus);
     audioSensor = AudioSensor(bus);
     curiositySensor = CuriositySensor(bus);
+    visionSensor = VisionSensor(bus);
 
     kernel.register(scheduler);
     kernel.register(workspace);
@@ -110,6 +113,7 @@ class RobotState extends ChangeNotifier {
     kernel.register(knowledgeImporter);
     kernel.register(audioSensor);
     kernel.register(curiositySensor);
+    kernel.register(visionSensor);
 
     await Hive.initFlutter();
     

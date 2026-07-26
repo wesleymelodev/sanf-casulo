@@ -30,20 +30,37 @@ class LanguageEngine {
         return;
       }
 
-      // Check if it's a direct input or directed audio
-      bool shouldRespond = false;
-      if (sourceEvent.source == "brain_visualizer" || 
-          sourceEvent.source == "terminal_sensor" || 
-          sourceEvent.source == "input_bar") {
-        shouldRespond = true;
-      } else if (sourceEvent.name == "sensor.audio") {
+      // 1. Reage a inputs diretos do InputBar (sempre responde)
+      if (sourceEvent.source == "input_bar") {
+        final text = sourceEvent.data.toString().toLowerCase();
+        
+        // Gatilho Manual de Câmera
+        if (text.contains("ative a câmera") || text.contains("olhe para mim") || text.contains("ver")) {
+          _bus.publish(Event(name: "vision.trigger.manual", source: name, priority: 1.0));
+          _publishResponse("[Comando] Ativando sensores visuais para captura imediata.");
+        }
+        
+        _processQuery(sourceEvent.data.toString());
+      } 
+      // 2. Reage a sinais de visão (consolida na memória silenciosamente)
+      else if (sourceEvent.name == "sensor.vision") {
+        _bus.publish(Event(
+          name: "cognition.learning.fact",
+          source: name,
+          data: "Observado visualmente: ${sourceEvent.data}",
+          confidence: 0.9,
+          priority: 0.6
+        ));
+      }
+      // 3. Reage a áudio ambiente
+      else if (sourceEvent.name == "sensor.audio") {
         final text = sourceEvent.data.toString().toLowerCase();
         final vocativos = ["sanf", "surf", "samf", "salf", "nexus", "spectrum", "você", "voce"];
-        shouldRespond = vocativos.any((v) => text.contains(v)) || text.endsWith("?");
-      }
-
-      if (shouldRespond) {
-        _processQuery(sourceEvent.data.toString());
+        bool shouldRespond = vocativos.any((v) => text.contains(v)) || text.endsWith("?");
+        
+        if (shouldRespond) {
+          _processQuery(sourceEvent.data.toString());
+        }
       }
     } else if (event.name == "cognition.proactive_thought") {
       final trigger = (event.data as Map)["trigger"];
