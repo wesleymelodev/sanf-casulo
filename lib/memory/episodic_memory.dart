@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:math';
 import 'package:hive/hive.dart';
 import '../models/event.dart';
@@ -21,22 +20,18 @@ class Episode {
     required this.recordedAt,
   });
 
-  Map<String, dynamic> toMap() {
+  // STRICTLY PRIMITIVE MAP
+  Map<String, dynamic> toRawMap() {
     return {
       'identifier': identifier,
       'salience': salience,
       'recorded_at': recordedAt.toIso8601String(),
-      'event': {
-        'name': event.name,
-        'source': event.source,
-        'data': event.data,
-        'confidence': event.confidence,
-        'novelty': event.novelty,
-        'priority': event.priority,
-        'energy_cost': event.energyCost,
-        'decay': event.decay,
-        'occurred_at': event.occurredAt.toIso8601String(),
-      }
+      'event_name': event.name,
+      'event_source': event.source,
+      'event_data': event.data?.toString() ?? "", // Force String to avoid type errors
+      'confidence': event.confidence,
+      'novelty': event.novelty,
+      'priority': event.priority,
     };
   }
 }
@@ -55,6 +50,15 @@ class EpisodicMemory extends LifecycleComponent {
   @override
   void initialize() async {
     _box = await Hive.openBox('episodic_memory_store');
+    
+    // Recovery: if box is corrupted with old complex types, clear it
+    try {
+      _box.values.toList();
+    } catch (e) {
+      print("Episodic Box corrupted, clearing...");
+      await _box.clear();
+    }
+
     _bus.subscribe("workspace.updated", handleEvent);
     _bus.subscribe("cognition.learning.fact", handleEvent);
   }
@@ -80,9 +84,9 @@ class EpisodicMemory extends LifecycleComponent {
       recordedAt: DateTime.now(),
     );
 
-    _box.add(episode.toMap());
+    // CRITICAL: only store primitive data
+    _box.add(episode.toRawMap());
     
-    // Trim logic (Hive specific)
     if (_box.length > _config.capacity) {
       _box.deleteAt(0);
     }

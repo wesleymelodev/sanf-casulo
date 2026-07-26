@@ -23,6 +23,8 @@ import '../cognition/reasoning.dart';
 import '../system/homeostasis.dart';
 import '../system/metrics.dart';
 import '../system/knowledge_importer.dart';
+import '../system/audio_sensor.dart';
+import '../system/curiosity_sensor.dart';
 
 class RobotState extends ChangeNotifier {
   // --- UI Reactive States ---
@@ -55,6 +57,8 @@ class RobotState extends ChangeNotifier {
   late final Homeostasis homeostasis;
   late final Metrics metrics;
   late final KnowledgeImporter knowledgeImporter;
+  late final AudioSensor audioSensor;
+  late final CuriositySensor curiositySensor;
   
   final FlutterTts tts = FlutterTts();
   final SpeechToText stt = SpeechToText();
@@ -86,6 +90,8 @@ class RobotState extends ChangeNotifier {
     homeostasis = Homeostasis(bus);
     metrics = Metrics(bus);
     knowledgeImporter = KnowledgeImporter(bus);
+    audioSensor = AudioSensor(bus);
+    curiositySensor = CuriositySensor(bus);
 
     kernel.register(scheduler);
     kernel.register(workspace);
@@ -101,6 +107,8 @@ class RobotState extends ChangeNotifier {
     kernel.register(homeostasis);
     kernel.register(metrics);
     kernel.register(knowledgeImporter);
+    kernel.register(audioSensor);
+    kernel.register(curiositySensor);
 
     await Hive.initFlutter();
     
@@ -141,14 +149,24 @@ class RobotState extends ChangeNotifier {
     isSpeaking = true;
     notifyListeners();
 
+    // Filtra asteriscos para o TTS não ler "asterisco" ou pausar estranhamente
+    final cleanText = text.replaceAll('*', '');
+
     try {
-      await tts.speak(text);
-      int estimatedDuration = (text.length * 75).clamp(2000, 15000); 
+      // Remove handlers do Windows que causam erro de thread
+      tts.setCompletionHandler(() {});
+      tts.setErrorHandler((msg) {});
+      
+      await tts.speak(cleanText);
+      
+      // Timer interno para animação (evita usar canal nativo de conclusão)
+      int estimatedDuration = (cleanText.length * 75).clamp(2000, 15000);
       Timer(Duration(milliseconds: estimatedDuration), () {
         isSpeaking = false;
         notifyListeners();
       });
     } catch (e) {
+      debugPrint("Erro silenciado no TTS Windows: $e");
       isSpeaking = false;
       notifyListeners();
     }
@@ -186,7 +204,8 @@ class RobotState extends ChangeNotifier {
        Hive.box('episodic_memory_store').add({
         'timestamp': DateTime.now().toIso8601String(),
         'sender': sender,
-        'text': text
+        'text': text,
+        'expression': expression.name, // Save as string to avoid Hive adapter error
       });
     }
   }
@@ -204,10 +223,15 @@ class RobotState extends ChangeNotifier {
   }
 
   void toggleListening() async {
-    if (!_speechEnabled) return;
+    // Note: Manual listening toggled from UI. 
+    // In passive mode, the AudioSensor handles this. 
+    // This method is now a fallback or manual override.
     if (isListening) {
       await stt.stop();
     } else {
+      _speechEnabled = await stt.initialize();
+      if (!_speechEnabled) return;
+
       await stt.listen(
         onResult: (result) {
           if (result.finalResult) {

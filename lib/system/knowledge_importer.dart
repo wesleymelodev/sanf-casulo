@@ -10,7 +10,7 @@ class KnowledgeImporter extends LifecycleComponent {
   
   final CognitiveBus _bus;
   late Box _statusBox;
-  final String knowledgePath = "brain/knowledge";
+  final String knowledgePath = "lib/knowledge";
 
   KnowledgeImporter(this._bus);
 
