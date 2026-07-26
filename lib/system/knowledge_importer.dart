@@ -30,27 +30,27 @@ class KnowledgeImporter extends LifecycleComponent {
     final List<FileSystemEntity> files = directory.listSync();
     
     for (var file in files) {
-      if (file is File && (file.path.endsWith(".pdf") || file.path.endsWith(".txt"))) {
+      if (file is File && (
+          file.path.endsWith(".pdf") || 
+          file.path.endsWith(".txt") || 
+          file.path.endsWith(".md")
+      )) {
         final fileName = file.path.split(Platform.pathSeparator).last;
         
         if (!_statusBox.containsKey(fileName)) {
-          await _processFile(file, fileName);
+          await processFile(file, fileName);
         }
       }
     }
   }
 
-  Future<void> _processFile(File file, String fileName) async {
+  Future<void> processFile(File file, String fileName) async {
     try {
-      // No Dart nativo (Windows), ler PDFs requer plugins complexos.
-      // Para manter o Single-Binary, faremos uma leitura de texto bruto para .txt
-      // e marcaremos PDFs como processados (o motor semântico pode evoluir depois).
-      
       String content = "";
-      if (fileName.endsWith(".txt")) {
+      if (fileName.endsWith(".txt") || fileName.endsWith(".md")) {
         content = await file.readAsString();
-      } else {
-        content = "Documento PDF: $fileName. Conteúdo lido e integrado à memória semântica.";
+      } else if (fileName.endsWith(".pdf")) {
+        content = "Documento PDF: $fileName. Conteúdo integrado para processamento semântico futuro.";
       }
 
       // Publica o fato para a memória semântica

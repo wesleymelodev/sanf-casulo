@@ -4,6 +4,7 @@ import 'providers/robot_state.dart';
 import 'widgets/robot_face.dart';
 import 'widgets/robot_mouth.dart';
 import 'widgets/input_bar.dart';
+import 'widgets/knowledge_uploader.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -106,10 +107,15 @@ class ShellPage extends StatelessWidget {
             bottom: 40,
             left: 0,
             right: 0,
-            child: Center(
-              child: InputBar(
-                onSend: (text) => state.sendMessage(text),
-              ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const KnowledgeUploader(),
+                const SizedBox(width: 10),
+                InputBar(
+                  onSend: (text) => state.sendMessage(text),
+                ),
+              ],
             ),
           ),
         ],

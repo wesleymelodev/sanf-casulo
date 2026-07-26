@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -220,6 +221,11 @@ class RobotState extends ChangeNotifier {
       data: text,
       priority: 0.9,
     ));
+  }
+
+  Future<void> importRuntimeFile(File file, String fileName) async {
+    await knowledgeImporter.processFile(file, fileName);
+    notifyListeners();
   }
 
   void toggleListening() async {
