@@ -6,12 +6,20 @@ import '../models/event.dart';
 import 'cognitive_bus.dart';
 import '../memory/semantic_memory.dart';
 
+import 'dart:io';
+import 'package:mediapipe_genai/mediapipe_genai.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 import '../models/bot_expression.dart';
 
 class LanguageEngine {
   final CognitiveBus _bus;
   final SemanticMemory? _semanticMemory;
   final String name = "language_engine";
+
+  LlmInferenceEngine? _localEngine;
+  bool _isLocalEngineInitializing = false;
+  double _currentTemperature = 1.0;
 
   final String geminiKey = const String.fromEnvironment('GEMINI_API_KEY');
   final String groqKey = const String.fromEnvironment('GROQ_API_KEY');
@@ -65,6 +73,12 @@ class LanguageEngine {
     } else if (event.name == "cognition.proactive_thought") {
       final trigger = (event.data as Map)["trigger"];
       _processProactiveQuery(trigger.toString());
+    } else if (event.name == "system.config.temperature_changed") {
+      _currentTemperature = (event.data as double);
+      // Force engine re-init with new temperature if it exists
+      if (_localEngine != null) {
+        _localEngine = null; // Next query will re-init with new temp
+      }
     }
   }
 
@@ -114,12 +128,21 @@ class LanguageEngine {
         "Memória:\n$semanticContext"
         "Diretrizes: Você possui curiosidade, iniciativa e preferências próprias, mas evita inventar fatos sobre o mundo ou sobre sua memória; Sua personalidade emerge de suas experiências, memórias e reflexões, mantendo coerência ao longo do tempo.";
 
-    // mantenha esses modelos exatamente assim, não altere em hipotese alguma
-    // Fallback Chain: Ollama -> Gemini -> Groq -> Cloudflare
+    // No Android, tentamos o modelo local primeiro via MediaPipe
+    if (Platform.isAndroid) {
+      try {
+        final localResult = await _tryLocalInference(systemPrompt, query, _currentTemperature);
+        if (localResult != null) return localResult;
+      } catch (e) {
+        debugPrint("Local Inference Failed: $e");
+      }
+    }
+
+    // Fallback Chain: Ollama (apenas Desktop) -> Gemini -> Groq -> Cloudflare
     final attempts = [
       () => _tryOllama("gemma3:1b", systemPrompt, query),
-      () => _tryGemini("gemini-3.6-flash", systemPrompt, query),
-      () => _tryGroq("openai/gpt-oss-120b", systemPrompt, query),
+      () => _tryGemini("gemini-3.6-flash", systemPrompt, query, _currentTemperature),
+      () => _tryGroq("openai/gpt-oss-120b", systemPrompt, query, _currentTemperature),
       () => _tryCloudflare("@cf/meta/llama-3.1-8b-instruct", systemPrompt, query),
     ];
 
@@ -135,7 +158,7 @@ class LanguageEngine {
     return "Sinto muito, meus sistemas de linguagem estão temporariamente offline.";
   }
 
-  Future<String?> _tryGemini(String model, String system, String query) async {
+  Future<String?> _tryGemini(String model, String system, String query, double temperature) async {
     if (geminiKey.isEmpty) return null;
     final url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$geminiKey";
     
@@ -144,7 +167,7 @@ class LanguageEngine {
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({
         "contents": [{"parts": [{"text": "$system\n\nUsuário: $query"}]}],
-        "generationConfig": {"temperature": 1.0, "maxOutputTokens": 2048}
+        "generationConfig": {"temperature": temperature, "maxOutputTokens": 2048}
       }),
     ).timeout(const Duration(seconds: 30));
 
@@ -155,7 +178,7 @@ class LanguageEngine {
     return null;
   }
 
-  Future<String?> _tryGroq(String model, String system, String query) async {
+  Future<String?> _tryGroq(String model, String system, String query, double temperature) async {
     if (groqKey.isEmpty) return null;
     final url = "https://api.groq.com/openai/v1/chat/completions";
     
@@ -171,7 +194,7 @@ class LanguageEngine {
           {"role": "system", "content": system},
           {"role": "user", "content": query}
         ],
-        "temperature": 1.0
+        "temperature": temperature
       }),
     ).timeout(const Duration(seconds: 20));
 
@@ -198,6 +221,45 @@ class LanguageEngine {
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       return data['response'];
+    }
+    return null;
+  }
+
+  Future<String?> _tryLocalInference(String system, String query, double temperature) async {
+    if (_localEngine == null && !_isLocalEngineInitializing) {
+      _isLocalEngineInitializing = true;
+      try {
+        // O app espera o modelo em: /storage/emulated/0/Android/data/com.lokinefrius.sanf/files/gemma3.bin
+        // Ou em uma pasta similar acessível pelo app.
+        final directory = await getExternalStorageDirectory();
+        final modelPath = p.join(directory!.path, 'gemma3.bin');
+
+        if (await File(modelPath).exists()) {
+          _localEngine = LlmInferenceEngine(LlmInferenceOptions.gpu(
+            modelPath: modelPath,
+            sequenceBatchSize: 128,
+            maxTokens: 2048,
+            temperature: temperature,
+            topK: 40,
+          ));
+          debugPrint("MediaPipe Engine Initialized with: $modelPath");
+        } else {
+          debugPrint("Local model file not found at $modelPath. Skipping local inference.");
+          _isLocalEngineInitializing = false;
+          return null;
+        }
+      } catch (e) {
+        debugPrint("Error initializing MediaPipe: $e");
+        _isLocalEngineInitializing = false;
+        return null;
+      }
+    }
+
+    if (_localEngine != null) {
+      final fullPrompt = "$system\n\nUsuário: $query\n\nSANF:";
+      final responseStream = _localEngine!.generateResponse(fullPrompt);
+      final fullResponse = await responseStream.join();
+      return fullResponse;
     }
     return null;
   }

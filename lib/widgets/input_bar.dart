@@ -28,45 +28,51 @@ class _InputBarState extends State<InputBar> {
     
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
-      // Aumentamos a largura base para caber os dois ícones com conforto
+      // Use constrained width to avoid overflow on small screens
       width: _isExpanded ? 350 : 120, 
+      constraints: const BoxConstraints(maxWidth: 600), // Prevent too much expansion
       height: 60,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 4), // Reduced padding
       decoration: BoxDecoration(
         color: Colors.cyan.withOpacity(0.15),
         borderRadius: BorderRadius.circular(30),
         border: Border.all(color: Colors.cyanAccent.withOpacity(0.4)),
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min, // Shrink-wrap the row
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           // Botão de Microfone
-          IconButton(
-            icon: Icon(
-              state.isListening ? Icons.stop : Icons.mic, 
-              color: state.isListening ? Colors.redAccent : Colors.cyanAccent
+          Flexible(
+            child: IconButton(
+              icon: Icon(
+                state.isListening ? Icons.stop : Icons.mic, 
+                color: state.isListening ? Colors.redAccent : Colors.cyanAccent
+              ),
+              onPressed: () {
+                state.toggleListening();
+              },
             ),
-            onPressed: () {
-              state.toggleListening();
-            },
           ),
           
           // Espaçamento interno quando não expandido
-          if (!_isExpanded) const SizedBox(width: 8),
+          if (!_isExpanded) const SizedBox(width: 4),
 
           // Campo de Texto (Só aparece quando expandido)
           if (_isExpanded)
             Expanded(
+              flex: 3,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                padding: const EdgeInsets.symmetric(horizontal: 4.0),
                 child: TextField(
                   controller: _controller,
                   autofocus: true,
-                  style: const TextStyle(color: Colors.white),
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
                   decoration: const InputDecoration(
                     hintText: "Fale comigo...",
-                    hintStyle: TextStyle(color: Colors.white38),
+                    hintStyle: TextStyle(color: Colors.white38, fontSize: 12),
                     border: InputBorder.none,
+                    isDense: true, // Thinner field
                   ),
                   onSubmitted: (_) => _handleSend(),
                 ),
@@ -74,18 +80,20 @@ class _InputBarState extends State<InputBar> {
             ),
 
           // Botão de Teclado / Enviar
-          IconButton(
-            icon: Icon(
-              _isExpanded ? Icons.send : Icons.keyboard, 
-              color: Colors.cyanAccent
+          Flexible(
+            child: IconButton(
+              icon: Icon(
+                _isExpanded ? Icons.send : Icons.keyboard, 
+                color: Colors.cyanAccent
+              ),
+              onPressed: () {
+                if (!_isExpanded) {
+                  setState(() => _isExpanded = true);
+                } else {
+                  _handleSend();
+                }
+              },
             ),
-            onPressed: () {
-              if (!_isExpanded) {
-                setState(() => _isExpanded = true);
-              } else {
-                _handleSend();
-              }
-            },
           ),
         ],
       ),

@@ -27,6 +27,7 @@ import '../system/knowledge_importer.dart';
 import '../system/audio_sensor.dart';
 import '../system/curiosity_sensor.dart';
 import '../system/vision_sensor.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class RobotState extends ChangeNotifier {
   // --- UI Reactive States ---
@@ -39,6 +40,7 @@ class RobotState extends ChangeNotifier {
   bool isListening = false;
   BotExpression expression = BotExpression.idle;
   List<Map<String, String>> chatHistory = [];
+  double modelTemperature = 0.8;
 
   // --- Internal Cognitive Core ---
   late final Kernel kernel;
@@ -75,6 +77,15 @@ class RobotState extends ChangeNotifier {
     bus = CognitiveBus();
     kernel = Kernel(targetCycleSeconds: 0.01);
     
+    // Request permissions for Android
+    if (Platform.isAndroid) {
+      await [
+        Permission.microphone,
+        Permission.camera,
+        Permission.storage,
+      ].request();
+    }
+
     scheduler = Scheduler(bus);
     workspace = CognitiveWorkspace(bus);
     
@@ -134,6 +145,17 @@ class RobotState extends ChangeNotifier {
     
     bus.subscribe("workspace.updated", (e) => languageEngine.handleEvent(e));
     bus.subscribe("cognition.proactive_thought", (e) => languageEngine.handleEvent(e));
+  }
+
+  void setModelTemperature(double val) {
+    modelTemperature = val;
+    bus.publish(Event(
+      name: "system.config.temperature_changed",
+      source: "ui_settings",
+      data: val,
+      priority: 0.1,
+    ));
+    notifyListeners();
   }
 
   void _onExpressionChanged(Event event) {

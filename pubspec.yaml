@@ -44,6 +44,9 @@ dependencies:
   cupertino_icons: ^1.0.8
   flutter_dotenv: ^5.1.0
   uuid: ^4.6.0
+  permission_handler: ^11.3.1
+  mediapipe_genai: ^0.0.1-dev.2
+  path: ^1.9.0
 
 dev_dependencies:
   flutter_test:
