@@ -6,9 +6,15 @@ import 'widgets/robot_mouth.dart';
 import 'widgets/input_bar.dart';
 import 'widgets/knowledge_uploader.dart';
 import 'widgets/settings_drawer.dart';
+import 'services/background_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Inicializa o Cérebro de Background (Android)
+  await BackgroundBrain.initialize();
+  BackgroundBrain.scheduleProactiveTask();
+
   runApp(
     ChangeNotifierProvider(
       create: (_) => RobotState(),
