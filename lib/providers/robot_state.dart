@@ -40,7 +40,7 @@ class RobotState extends ChangeNotifier {
   bool isListening = false;
   BotExpression expression = BotExpression.idle;
   List<Map<String, String>> chatHistory = [];
-  double modelTemperature = 0.8;
+  double modelTemperature = 1.0;
 
   // --- Internal Cognitive Core ---
   late final Kernel kernel;
@@ -79,11 +79,15 @@ class RobotState extends ChangeNotifier {
     
     // Request permissions for Android
     if (Platform.isAndroid) {
-      await [
-        Permission.microphone,
-        Permission.camera,
-        Permission.storage,
-      ].request();
+      try {
+        await [
+          Permission.microphone,
+          Permission.camera,
+          Permission.storage,
+        ].request();
+      } catch (e) {
+        debugPrint("Permission Error: $e");
+      }
     }
 
     scheduler = Scheduler(bus);
@@ -128,13 +132,18 @@ class RobotState extends ChangeNotifier {
 
     await Hive.initFlutter();
     
-    await tts.setLanguage("pt-BR");
-    _speechEnabled = await stt.initialize(
-      onStatus: (status) {
-        isListening = status == 'listening';
-        notifyListeners();
-      },
-    );
+    try {
+      await tts.setLanguage("pt-BR");
+      _setMaleVoice();
+      _speechEnabled = await stt.initialize(
+        onStatus: (status) {
+          isListening = status == 'listening';
+          notifyListeners();
+        },
+      );
+    } catch (e) {
+      debugPrint("TTS/STT Init Error: $e");
+    }
 
     kernel.run();
 
@@ -162,6 +171,83 @@ class RobotState extends ChangeNotifier {
     if (event.data is BotExpression) {
       expression = event.data;
       notifyListeners();
+    }
+  }
+
+  void _setMaleVoice() async {
+    debugPrint("--- INICIANDO BUSCA DE VOZES (TARGET: NESO) ---");
+    try {
+      List<dynamic> voices = await tts.getVoices;
+      
+      if (voices.isEmpty) {
+        debugPrint("AVISO: Lista de vozes vazia. Tentando novamente em 2s...");
+        Future.delayed(const Duration(seconds: 2), _setMaleVoice);
+        return;
+      }
+
+      debugPrint("TOTAL DE VOZES: ${voices.length}");
+      for (var v in voices) {
+        debugPrint("VOZ: ${v["name"]} | Locale: ${v["locale"]} | Gender: ${v["gender"]}");
+      }
+
+      // 1. TENTATIVA DIRETA: Buscar por "neso" ou "Voz II"
+      var target = voices.firstWhere(
+        (v) {
+          String name = v["name"].toString().toLowerCase();
+          String locale = v["locale"].toString().toLowerCase();
+          return locale.contains("pt") && (name.contains("neso") || name.contains("voz ii") || name.contains("voz 2"));
+        },
+        orElse: () => null,
+      );
+
+      // 2. TENTATIVA ESPECÍFICA GOOGLE MALE (pt-br-x-ptd)
+      if (target == null) {
+        debugPrint("Voz 'neso' não encontrada. Tentando padrão Google Masculino (ptd)...");
+        target = voices.firstWhere(
+          (v) {
+            String name = v["name"].toString().toLowerCase();
+            String locale = v["locale"].toString().toLowerCase();
+            return locale.contains("pt") && name.contains("ptd");
+          },
+          orElse: () => null,
+        );
+      }
+
+      // 3. BUSCA POR GENERO OU IDENTIFICADORES MASCULINOS CONHECIDOS (Fallback)
+      if (target == null) {
+        debugPrint("Heurística final para voz masculina...");
+        target = voices.firstWhere(
+          (v) {
+            String name = v["name"].toString().toLowerCase();
+            String gender = v["gender"]?.toString().toLowerCase() ?? "";
+            String locale = v["locale"].toString().toLowerCase();
+            
+            bool isPt = locale.contains("pt");
+            bool isMale = gender == "male" || 
+                          name.contains("male") || 
+                          name.contains("david") ||
+                          name.contains("-b-") || // Padrão Google para vozes masculinas
+                          name.contains("standard-b") ||
+                          name.contains("wavenet-b");
+            return isPt && isMale;
+          },
+          orElse: () => null,
+        );
+      }
+
+      if (target != null) {
+        debugPrint("VOZ SELECIONADA FINAL: ${target["name"]}");
+        await tts.setVoice({
+          "name": target["name"],
+          "locale": target["locale"]
+        });
+        await tts.setPitch(0.8); 
+      } else {
+        debugPrint("ERRO: Nenhuma voz compatível encontrada. Forçando tom grave extremo.");
+        await tts.setPitch(0.1); 
+      }
+    } catch (e) {
+      debugPrint("Erro fatal ao configurar voz: $e");
     }
   }
 

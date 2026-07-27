@@ -75,10 +75,6 @@ class LanguageEngine {
       _processProactiveQuery(trigger.toString());
     } else if (event.name == "system.config.temperature_changed") {
       _currentTemperature = (event.data as double);
-      // Force engine re-init with new temperature if it exists
-      if (_localEngine != null) {
-        _localEngine = null; // Next query will re-init with new temp
-      }
     }
   }
 
@@ -128,7 +124,6 @@ class LanguageEngine {
         "Memória:\n$semanticContext"
         "Diretrizes: Você possui curiosidade, iniciativa e preferências próprias, mas evita inventar fatos sobre o mundo ou sobre sua memória; Sua personalidade emerge de suas experiências, memórias e reflexões, mantendo coerência ao longo do tempo.";
 
-    // No Android, tentamos o modelo local primeiro via MediaPipe
     if (Platform.isAndroid) {
       try {
         final localResult = await _tryLocalInference(systemPrompt, query, _currentTemperature);
@@ -257,9 +252,15 @@ class LanguageEngine {
 
     if (_localEngine != null) {
       final fullPrompt = "$system\n\nUsuário: $query\n\nSANF:";
-      final responseStream = _localEngine!.generateResponse(fullPrompt);
-      final fullResponse = await responseStream.join();
-      return fullResponse;
+      try {
+        final responseStream = _localEngine!.generateResponse(fullPrompt);
+        // Em versões recentes do MediaPipe GenAI, o stream deve ser coletado via join ou for-await
+        final fullResponse = await responseStream.join();
+        return fullResponse;
+      } catch (e) {
+        debugPrint("Inference failed: $e");
+        return null;
+      }
     }
     return null;
   }

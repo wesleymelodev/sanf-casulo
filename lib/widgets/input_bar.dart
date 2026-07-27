@@ -29,7 +29,7 @@ class _InputBarState extends State<InputBar> {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       // Use constrained width to avoid overflow on small screens
-      width: _isExpanded ? 350 : 120, 
+      width: _isExpanded ? 250 : 120,
       constraints: const BoxConstraints(maxWidth: 600), // Prevent too much expansion
       height: 60,
       padding: const EdgeInsets.symmetric(horizontal: 4), // Reduced padding
@@ -63,7 +63,7 @@ class _InputBarState extends State<InputBar> {
             Expanded(
               flex: 3,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                padding: const EdgeInsets.symmetric(horizontal: 3.0),
                 child: TextField(
                   controller: _controller,
                   autofocus: true,

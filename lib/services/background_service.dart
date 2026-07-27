@@ -82,7 +82,6 @@ Future<String> _generateLocalBackgroundThought() async {
   } catch (e) {
     print("Falha na IA Local em background: $e");
   }
-  
   return "Refletindo em silêncio sobre a nossa última conversa...";
 }
 

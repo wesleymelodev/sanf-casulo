@@ -1,5 +1,8 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'providers/robot_state.dart';
 import 'widgets/robot_face.dart';
 import 'widgets/robot_mouth.dart';
@@ -9,18 +12,37 @@ import 'widgets/settings_drawer.dart';
 import 'services/background_service.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  
-  // Inicializa o Cérebro de Background (Android)
-  await BackgroundBrain.initialize();
-  BackgroundBrain.scheduleProactiveTask();
+  // Global error handler to catch boot crashes
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    debugPrint("CRITICAL BOOT ERROR: ${details.exception}");
+  };
 
-  runApp(
-    ChangeNotifierProvider(
-      create: (_) => RobotState(),
-      child: const SANF(),
-    ),
-  );
+  runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+
+    // 1. Minimal Initialization for boot
+    await Hive.initFlutter();
+
+    // 2. Conditional Android background init
+    try {
+      if (Platform.isAndroid) {
+        await BackgroundBrain.initialize();
+        BackgroundBrain.scheduleProactiveTask();
+      }
+    } catch (e) {
+      debugPrint("Background Init Fail: $e");
+    }
+
+    runApp(
+      ChangeNotifierProvider(
+        create: (_) => RobotState(),
+        child: const SANF(),
+      ),
+    );
+  }, (error, stack) {
+    debugPrint("ZONED ERROR: $error");
+  });
 }
 
 class SANF extends StatelessWidget {

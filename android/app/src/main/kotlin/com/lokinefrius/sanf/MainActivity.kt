@@ -1,4 +1,4 @@
-package com.example.sanf
+package com.lokinefrius.sanf
 
 import io.flutter.embedding.android.FlutterActivity
 
