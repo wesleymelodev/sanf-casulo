@@ -1,4 +1,6 @@
 import 'package:hive/hive.dart';
+import 'package:crypto/crypto.dart';
+import 'dart:convert';
 import '../models/event.dart';
 import '../services/cognitive_bus.dart';
 import '../core/kernel.dart';
@@ -78,8 +80,16 @@ class SemanticMemory extends LifecycleComponent {
     if (event.name != "memory.episodic.stored" || event.data is! Episode) return;
     
     final Episode episode = event.data;
+    
+    // FILTRO SEMÂNTICO: Apenas consolida fatos de aprendizado ou diálogos
+    if (!episode.event.name.contains("learning.fact") && 
+        !episode.event.name.contains("user.input") &&
+        !episode.event.name.contains("cognition.response")) {
+      return;
+    }
+
     final identity = _conceptIdentity(episode.event);
-    final id = identity.item1;
+    final id = sha256.convert(utf8.encode(identity.item1)).toString();
     final label = identity.item2;
 
     final existing = _concepts[id];

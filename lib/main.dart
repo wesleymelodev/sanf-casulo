@@ -10,6 +10,7 @@ import 'widgets/input_bar.dart';
 import 'widgets/knowledge_uploader.dart';
 import 'widgets/settings_drawer.dart';
 import 'services/background_service.dart';
+import 'services/knowledge_seeder.dart';
 
 void main() async {
   // Global error handler to catch boot crashes
@@ -21,7 +22,10 @@ void main() async {
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
 
-    // 1. Minimal Initialization for boot
+    // 1. Seed knowledge from build-time processed files
+    await KnowledgeSeeder.seedIfNecessary();
+
+    // 2. Minimal Initialization for boot
     await Hive.initFlutter();
 
     // 2. Conditional Android background init

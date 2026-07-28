@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:hive/hive.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/event.dart';
 import '../services/cognitive_bus.dart';
 import '../core/kernel.dart';
@@ -10,23 +11,31 @@ class KnowledgeImporter extends LifecycleComponent {
   
   final CognitiveBus _bus;
   late Box _statusBox;
-  final String knowledgePath = "lib/knowledge";
+  String? _resolvedKnowledgePath;
 
   KnowledgeImporter(this._bus);
 
   @override
   void initialize() async {
     _statusBox = await Hive.openBox('knowledge_status');
+    
+    // Resolve o caminho dinamicamente baseado na plataforma
+    final directory = await getApplicationDocumentsDirectory();
+    _resolvedKnowledgePath = "${directory.path}/knowledge";
+    
+    // Garante que a pasta existe para evitar erros de "não encontrado"
+    final folder = Directory(_resolvedKnowledgePath!);
+    if (!await folder.exists()) {
+      await folder.create(recursive: true);
+    }
+    
     _scanKnowledgeBase();
   }
 
   Future<void> _scanKnowledgeBase() async {
-    final directory = Directory(knowledgePath);
-    if (!await directory.exists()) {
-      print("Diretório de conhecimento não encontrado: $knowledgePath");
-      return;
-    }
-
+    if (_resolvedKnowledgePath == null) return;
+    
+    final directory = Directory(_resolvedKnowledgePath!);
     final List<FileSystemEntity> files = directory.listSync();
     
     for (var file in files) {
@@ -49,24 +58,44 @@ class KnowledgeImporter extends LifecycleComponent {
       String content = "";
       if (fileName.endsWith(".txt") || fileName.endsWith(".md")) {
         content = await file.readAsString();
+        
+        // Quebra o texto em chunks de ~500 caracteres para melhor indexação
+        final chunks = _splitIntoChunks(content, 500);
+        
+        for (var i = 0; i < chunks.length; i++) {
+          _bus.publish(Event(
+            name: "cognition.learning.fact",
+            source: name,
+            data: "Fato extraído de $fileName (Parte ${i+1}): ${chunks[i]}",
+            confidence: 1.0,
+            priority: 0.8,
+          ));
+        }
       } else if (fileName.endsWith(".pdf")) {
-        content = "Documento PDF: $fileName. Conteúdo integrado para processamento semântico futuro.";
+        // Marcação simples para PDF (Conversão manual para TXT recomendada para ler conteúdo)
+        content = "O arquivo PDF '$fileName' foi catalogado na base de conhecimento.";
+        _bus.publish(Event(
+          name: "cognition.learning.fact",
+          source: name,
+          data: content,
+          confidence: 1.0,
+          priority: 0.5,
+        ));
       }
 
-      // Publica o fato para a memória semântica
-      _bus.publish(Event(
-        name: "cognition.learning.fact",
-        source: name,
-        data: "Conhecimento de $fileName: $content",
-        confidence: 1.0,
-        priority: 0.8,
-      ));
-
       await _statusBox.put(fileName, DateTime.now().toIso8601String());
-      print("Arquivo processado e integrado: $fileName");
+      print("Conhecimento de '$fileName' processado e indexado.");
     } catch (e) {
-      print("Erro ao processar arquivo $fileName: $e");
+      print("Erro ao indexar arquivo $fileName: $e");
     }
+  }
+
+  List<String> _splitIntoChunks(String text, int size) {
+    List<String> chunks = [];
+    for (var i = 0; i < text.length; i += size) {
+      chunks.add(text.substring(i, i + size > text.length ? text.length : i + size));
+    }
+    return chunks;
   }
 
   @override

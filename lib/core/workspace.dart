@@ -33,8 +33,9 @@ class CognitiveWorkspace extends LifecycleComponent {
   }
 
   void handleEvent(Event event) {
-    // Filter out internal workspace events to prevent feedback loops
+    // FILTRO CRÍTICO: Workspace ignora métricas e batimentos de sistema
     if (event.source == name || 
+        event.name.startsWith("system.") ||
         event.name.startsWith("workspace.") || 
         event.name.startsWith("memory.") ||
         event.name.startsWith("attention.") ||
