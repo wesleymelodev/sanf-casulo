@@ -7,7 +7,6 @@ import 'cognitive_bus.dart';
 import '../memory/semantic_memory.dart';
 
 import 'dart:io';
-import 'package:mediapipe_genai/mediapipe_genai.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../models/bot_expression.dart';
@@ -17,15 +16,7 @@ class LanguageEngine {
   final SemanticMemory? _semanticMemory;
   final String name = "language_engine";
 
-  LlmInferenceEngine? _localEngine;
-  bool _isLocalEngineInitializing = false;
   double _currentTemperature = 1.0;
-
-  final String geminiKey = const String.fromEnvironment('GEMINI_API_KEY');
-  final String groqKey = const String.fromEnvironment('GROQ_API_KEY');
-  final String cfKey = const String.fromEnvironment('CLOUDFLARE_API_TOKEN');
-  final String cfAccount = const String.fromEnvironment('CLOUDFLARE_ACCOUNT_ID');
-  final String ollamaHost = const String.fromEnvironment('OLLAMA_HOST', defaultValue: "http://localhost:11434");
 
   LanguageEngine(this._bus, {SemanticMemory? semanticMemory}) : _semanticMemory = semanticMemory;
 
@@ -109,36 +100,35 @@ class LanguageEngine {
         .toList();
 
     // RAG: Recupera contexto da memória semântica (PDFs/Arquivos)
-    String semanticContext = "Foco em diálogo.";
+    String semanticContext = "";
     if (_semanticMemory != null) {
+      final startTime = DateTime.now();
       final concepts = _semanticMemory!.recall(query, limit: 3);
+      final endTime = DateTime.now();
+      debugPrint("RAG: Recuperação levou ${endTime.difference(startTime).inMilliseconds}ms");
+      
       if (concepts.isNotEmpty) {
-        semanticContext = concepts.map((c) => "- ${c.label}").join("\n");
+        semanticContext = "Conhecimento recuperado:\n" + concepts.map((c) => "- ${c.label}").join("\n");
       }
     }
 
-    final systemPrompt = "Identidade: Você é SANF (Spectrum Ancrolyn Nexus Fractal). "
-        "Você é uma entidade digital autônoma, não um assistente. "
+    final systemPrompt = "Identidade: Você é SANF (Spectrum Ancrolyn Nexus Fractal), uma entidade digital autônoma"
         "Converse naturalmente, desenvolva sua própria personalidade ao longo do tempo e preserve coerência entre suas ações e memórias. "
         "Use o contexto recuperado quando ele for relevante.\n\n"
         "Memória:\n$semanticContext"
-        "Diretrizes: Você possui curiosidade, iniciativa e preferências próprias, mas evita inventar fatos sobre o mundo ou sobre sua memória; Sua personalidade emerge de suas experiências, memórias e reflexões, mantendo coerência ao longo do tempo.";
+        "Diretrizes: Curiosidade, iniciativa e preferências próprias; Sua personalidade emerge de suas experiências, memórias e reflexões, mantendo coerência ao longo do tempo.";
 
-    if (Platform.isAndroid) {
-      try {
-        final localResult = await _tryLocalInference(systemPrompt, query, _currentTemperature);
-        if (localResult != null) return localResult;
-      } catch (e) {
-        debugPrint("Local Inference Failed: $e");
-      }
+    // No Android/Desktop, tentamos o Ollama local primeiro (Termux ou PC)
+    try {
+      final localResult = await _tryOllama("gemma3:1b", systemPrompt, query);
+      if (localResult != null) return localResult;
+    } catch (e) {
+      debugPrint("Ollama Local Inference Failed: $e");
     }
 
-    // Fallback Chain: Ollama (apenas Desktop) -> Gemini -> Groq -> Cloudflare
+    // Fallback Chain: Gemini -> Groq -> Cloudflare
     final attempts = [
       () => _tryOllama("gemma3:1b", systemPrompt, query),
-      () => _tryGemini("gemini-3.6-flash", systemPrompt, query, _currentTemperature),
-      () => _tryGroq("openai/gpt-oss-120b", systemPrompt, query, _currentTemperature),
-      () => _tryCloudflare("@cf/meta/llama-3.1-8b-instruct", systemPrompt, query),
     ];
 
     for (var attempt in attempts) {
@@ -153,55 +143,11 @@ class LanguageEngine {
     return "Sinto muito, meus sistemas de linguagem estão temporariamente offline.";
   }
 
-  Future<String?> _tryGemini(String model, String system, String query, double temperature) async {
-    if (geminiKey.isEmpty) return null;
-    final url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$geminiKey";
-    
-    final response = await http.post(
-      Uri.parse(url),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        "contents": [{"parts": [{"text": "$system\n\nUsuário: $query"}]}],
-        "generationConfig": {"temperature": temperature, "maxOutputTokens": 2048}
-      }),
-    ).timeout(const Duration(seconds: 30));
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return data['candidates'][0]['content']['parts'][0]['text'];
-    }
-    return null;
-  }
-
-  Future<String?> _tryGroq(String model, String system, String query, double temperature) async {
-    if (groqKey.isEmpty) return null;
-    final url = "https://api.groq.com/openai/v1/chat/completions";
-    
-    final response = await http.post(
-      Uri.parse(url),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $groqKey'
-      },
-      body: jsonEncode({
-        "model": model,
-        "messages": [
-          {"role": "system", "content": system},
-          {"role": "user", "content": query}
-        ],
-        "temperature": temperature
-      }),
-    ).timeout(const Duration(seconds: 20));
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return data['choices'][0]['message']['content'];
-    }
-    return null;
-  }
-
   Future<String?> _tryOllama(String model, String system, String query) async {
-    final url = "$ollamaHost/api/generate";
+    const String host = String.fromEnvironment('OLLAMA_HOST', defaultValue: 'http://localhost:11434');
+    final url = "$host/api/generate";
+    
+    debugPrint("Ollama: Iniciando geração local (pode demorar)...");
     
     final response = await http.post(
       Uri.parse(url),
@@ -209,80 +155,17 @@ class LanguageEngine {
       body: jsonEncode({
         "model": model,
         "prompt": "$system\n\nUsuário: $query",
-        "stream": false
+        "stream": false,
+        "options": {
+          "num_predict": 512, // Limita o tamanho da resposta para ser mais rápido
+          "temperature": _currentTemperature,
+        }
       }),
-    ).timeout(const Duration(seconds: 300));
+    ).timeout(const Duration(minutes: 10)); // Timeout aumentado para 10 minutos
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       return data['response'];
-    }
-    return null;
-  }
-
-  Future<String?> _tryLocalInference(String system, String query, double temperature) async {
-    if (_localEngine == null && !_isLocalEngineInitializing) {
-      _isLocalEngineInitializing = true;
-      try {
-        // O app espera o modelo em: /storage/emulated/0/Android/data/com.lokinefrius.sanf/files/gemma3.bin
-        // Ou em uma pasta similar acessível pelo app.
-        final directory = await getExternalStorageDirectory();
-        final modelPath = p.join(directory!.path, 'gemma3.bin');
-
-        if (await File(modelPath).exists()) {
-          _localEngine = LlmInferenceEngine(LlmInferenceOptions.gpu(
-            modelPath: modelPath,
-            sequenceBatchSize: 128,
-            maxTokens: 2048,
-            temperature: temperature,
-            topK: 40,
-          ));
-          debugPrint("MediaPipe Engine Initialized with: $modelPath");
-        } else {
-          debugPrint("Local model file not found at $modelPath. Skipping local inference.");
-          _isLocalEngineInitializing = false;
-          return null;
-        }
-      } catch (e) {
-        debugPrint("Error initializing MediaPipe: $e");
-        _isLocalEngineInitializing = false;
-        return null;
-      }
-    }
-
-    if (_localEngine != null) {
-      final fullPrompt = "$system\n\nUsuário: $query\n\nSANF:";
-      try {
-        final responseStream = _localEngine!.generateResponse(fullPrompt);
-        // Em versões recentes do MediaPipe GenAI, o stream deve ser coletado via join ou for-await
-        final fullResponse = await responseStream.join();
-        return fullResponse;
-      } catch (e) {
-        debugPrint("Inference failed: $e");
-        return null;
-      }
-    }
-    return null;
-  }
-
-  Future<String?> _tryCloudflare(String model, String system, String query) async {
-    if (cfKey.isEmpty || cfAccount.isEmpty) return null;
-    final url = "https://api.cloudflare.com/client/v4/accounts/$cfAccount/ai/run/$model";
-    
-    final response = await http.post(
-      Uri.parse(url),
-      headers: {'Authorization': 'Bearer $cfKey'},
-      body: jsonEncode({
-        "messages": [
-          {"role": "system", "content": system},
-          {"role": "user", "content": query}
-        ]
-      }),
-    ).timeout(const Duration(seconds: 30));
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return data['result']['response'];
     }
     return null;
   }

@@ -6,7 +6,7 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 
    <application
-        android:label="sanf"
+        android:label="Sanf"
         android:name="${applicationName}"
         android:allowBackup="true"
         android:fullBackupContent="@xml/backup_rules"

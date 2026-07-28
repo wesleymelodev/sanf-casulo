@@ -1,8 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:camera/camera.dart';
-import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
+import 'package:google_mlkit_object_detection/google_mlkit_object_detection.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 import '../models/event.dart';
 import '../services/cognitive_bus.dart';
 import '../core/kernel.dart';
@@ -13,99 +15,89 @@ class VisionSensor extends LifecycleComponent {
 
   final CognitiveBus _bus;
   bool _isCapturing = false;
-
-  final String geminiKey = const String.fromEnvironment('GEMINI_API_KEY');
+  ObjectDetector? _objectDetector;
 
   VisionSensor(this._bus);
 
   @override
   void initialize() {
-    debugPrint("VisionSensor inicializado (Modo Econômico/Privacidade).");
-    // Ouve solicitações de visão
+    debugPrint("VisionSensor inicializado (Modo Local/Privacidade).");
+    _initDetector();
     _bus.subscribe("vision.trigger.manual", (e) => _captureAndAnalyze());
   }
 
+  Future<void> _initDetector() async {
+    try {
+      // Tenta carregar o modelo customizado se existir, senão usa o modelo base do ML Kit
+      final directory = await getExternalStorageDirectory();
+      final modelPath = p.join(directory!.path, 'gemma3-1B-it-int4.tflite');
+
+      if (await File(modelPath).exists()) {
+        final options = LocalObjectDetectorOptions(
+          mode: DetectionMode.single,
+          modelPath: modelPath,
+          classifyObjects: true,
+          multipleObjects: true,
+        );
+        _objectDetector = ObjectDetector(options: options);
+        debugPrint("Vision: Detector Local (Gemma TFLite) carregado: $modelPath");
+      } else {
+        debugPrint("Vision: Modelo gemma3.tflite não encontrado. Usando Detector Base do Google (Offline).");
+        // O ObjectDetectorOptions sem modelPath usa o modelo pré-instalado do Google Play Services
+        final options = ObjectDetectorOptions(
+          mode: DetectionMode.single,
+          classifyObjects: true,
+          multipleObjects: true,
+        );
+        _objectDetector = ObjectDetector(options: options);
+      }
+    } catch (e) {
+      debugPrint("Erro ao inicializar detector visual: $e");
+    }
+  }
+
   Future<void> _captureAndAnalyze() async {
-    if (_isCapturing) return;
+    if (_isCapturing || _objectDetector == null) return;
     _isCapturing = true;
 
     CameraController? controller;
 
     try {
-      debugPrint("Vision: Ativando câmera...");
+      debugPrint("Vision: Ativando hardware local...");
       final cameras = await availableCameras();
-      if (cameras.isEmpty) {
-        debugPrint("Nenhuma câmera encontrada.");
-        return;
-      }
+      if (cameras.isEmpty) return;
 
-      controller = CameraController(
-        cameras.first,
-        ResolutionPreset.medium,
-        enableAudio: false,
-      );
-
+      controller = CameraController(cameras.first, ResolutionPreset.medium, enableAudio: false);
       await controller.initialize();
-      
-      // Captura alguns frames para ajuste automático de exposição
       await Future.delayed(const Duration(milliseconds: 500));
       
-      debugPrint("Vision: Capturando quadro...");
       final XFile image = await controller.takePicture();
-      
-      // DESLIGA A CÂMERA IMEDIATAMENTE APÓS O CLIQUE
       await controller.dispose();
       controller = null;
-      debugPrint("Vision: Câmera desligada.");
 
-      final bytes = await image.readAsBytes();
-      final base64Image = base64Encode(bytes);
+      final inputImage = InputImage.fromFilePath(image.path);
+      final List<DetectedObject> objects = await _objectDetector!.processImage(inputImage);
 
-      debugPrint("Vision: Analisando com Gemini...");
-      final description = await _getGeminiDescription(base64Image);
+      String description = _formatDescription(objects);
+      _publishVisionEvent(description);
       
-      if (description != null) {
-        _publishVisionEvent(description);
-      }
     } catch (e) {
-      debugPrint("Erro na captura de visão: $e");
+      debugPrint("Erro na visão local: $e");
     } finally {
       _isCapturing = false;
-      // Garante o fechamento em caso de erro
-      if (controller != null) {
-        await controller.dispose();
-      }
+      if (controller != null) await controller.dispose();
     }
   }
 
-  Future<String?> _getGeminiDescription(String base64Image) async {
-    if (geminiKey.isEmpty) return null;
+  String _formatDescription(List<DetectedObject> objects) {
+    if (objects.isEmpty) return "Ambiente observado, nenhum objeto específico identificado.";
+    
+    final labels = objects.map((obj) {
+      final label = obj.labels.isNotEmpty ? obj.labels.first.text : "objeto desconhecido";
+      return "- $label (confiança: ${(obj.labels.isNotEmpty ? obj.labels.first.confidence * 100 : 0).toStringAsFixed(0)}%)";
+    }).join("\n");
 
-    const model = "gemini-1.5-flash"; 
-    final url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$geminiKey";
-
-    try {
-      final response = await http.post(
-        Uri.parse(url),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          "contents": [{
-            "parts": [
-              {"text": "Descreva detalhadamente o que você vê nesta imagem para minha memória."},
-              {"inline_data": {"mime_type": "image/jpeg", "data": base64Image}}
-            ]
-          }]
-        }),
-      ).timeout(const Duration(seconds: 30));
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['candidates'][0]['content']['parts'][0]['text'];
-      }
-    } catch (e) {
-      debugPrint("Falha na API Vision: $e");
-    }
-    return null;
+    return "Análise Visual Local:\n$labels";
   }
 
   void _publishVisionEvent(String description) {
@@ -123,5 +115,7 @@ class VisionSensor extends LifecycleComponent {
   void update(double deltaTime) {}
 
   @override
-  void shutdown() {}
+  void shutdown() {
+    _objectDetector?.close();
+  }
 }
