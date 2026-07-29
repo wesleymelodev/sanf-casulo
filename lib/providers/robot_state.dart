@@ -38,6 +38,7 @@ class RobotState extends ChangeNotifier {
   String attentionFocus = "Nenhum";
   bool isSpeaking = false;
   bool isListening = false;
+  bool isThinking = false;
   BotExpression expression = BotExpression.idle;
   List<Map<String, String>> chatHistory = [];
   double modelTemperature = 1.0;
@@ -148,6 +149,14 @@ class RobotState extends ChangeNotifier {
     kernel.run();
 
     bus.subscribe("cognition.response", _onCognitionResponse);
+    bus.subscribe("cognition.thinking.start", (e) {
+      isThinking = true;
+      notifyListeners();
+    });
+    bus.subscribe("cognition.thinking.stop", (e) {
+      isThinking = false;
+      notifyListeners();
+    });
     bus.subscribe("attention.focus.changed", _onAttentionFocusChanged);
     bus.subscribe("system.homeostasis.changed", _onHomeostasisChanged);
     bus.subscribe("ui.expression.changed", _onExpressionChanged);

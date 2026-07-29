@@ -106,7 +106,10 @@ class ShellPage extends StatelessWidget {
                   energy: state.energy,
                 ),
                 const SizedBox(height: 20),
-                RobotMouth(isSpeaking: state.isSpeaking),
+                if (state.isThinking)
+                  const ThinkingIndicator()
+                else
+                  RobotMouth(isSpeaking: state.isSpeaking),
               ],
             ),
           ),
@@ -251,6 +254,75 @@ class ShellPage extends StatelessWidget {
               ),
             );
           }
+        ),
+      ],
+    );
+  }
+}
+
+class ThinkingIndicator extends StatefulWidget {
+  const ThinkingIndicator({super.key});
+
+  @override
+  State<ThinkingIndicator> createState() => _ThinkingIndicatorState();
+}
+
+class _ThinkingIndicatorState extends State<ThinkingIndicator> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 1),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(3, (index) {
+            return FadeTransition(
+              opacity: Tween<double>(begin: 0.2, end: 1.0).animate(
+                CurvedAnimation(
+                  parent: _controller,
+                  curve: Interval(index * 0.2, 0.6 + index * 0.2, curve: Curves.easeInOut),
+                ),
+              ),
+              child: Container(
+                width: 8,
+                height: 8,
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: const BoxDecoration(
+                  color: Colors.cyanAccent,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(color: Colors.cyan, blurRadius: 8, spreadRadius: 1)
+                  ],
+                ),
+              ),
+            );
+          }),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          "PROCESSANDO...",
+          style: TextStyle(
+            color: Colors.cyanAccent,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 2,
+          ),
         ),
       ],
     );

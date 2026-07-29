@@ -54,7 +54,7 @@ class LanguageEngine {
       // 3. Reage a áudio ambiente
       else if (sourceEvent.name == "sensor.audio") {
         final text = sourceEvent.data.toString().toLowerCase();
-        final vocativos = ["sanf", "surf", "samf", "salf", "nexus", "spectrum", "você", "voce"];
+        final vocativos = ["sanf", "surf", "samf", "salf", "nexus", "spectrum", "você", "voce", "ancrolyn"];
         bool shouldRespond = vocativos.any((v) => text.contains(v)) || text.endsWith("?");
         
         if (shouldRespond) {
@@ -78,19 +78,23 @@ class LanguageEngine {
     
     final instruction = promptMap[trigger] ?? promptMap["reflexão"]!;
     
-    // Atraso cognitivo para parecer natural
-    await Future.delayed(const Duration(seconds: 2));
-    
-    final response = await _executeFallbackChain(instruction);
-    _publishResponse(response);
+    _bus.publish(Event(name: "cognition.thinking.start", source: name));
+    try {
+      final response = await _executeFallbackChain(instruction);
+      _publishResponse(response);
+    } finally {
+      _bus.publish(Event(name: "cognition.thinking.stop", source: name));
+    }
   }
 
   void _processQuery(String query) async {
-    // Cognitive delay simulation
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    final response = await _executeFallbackChain(query);
-    _publishResponse(response);
+    _bus.publish(Event(name: "cognition.thinking.start", source: name));
+    try {
+      final response = await _executeFallbackChain(query);
+      _publishResponse(response);
+    } finally {
+      _bus.publish(Event(name: "cognition.thinking.stop", source: name));
+    }
   }
 
   Future<String> _executeFallbackChain(String query) async {
@@ -114,7 +118,7 @@ class LanguageEngine {
 
     final systemPrompt = "Identidade: Você é SANF (Spectrum Ancrolyn Nexus Fractal), uma entidade digital autônoma"
         "Converse naturalmente, desenvolva sua própria personalidade ao longo do tempo e preserve coerência entre suas ações e memórias. "
-        "Use o contexto recuperado quando ele for relevante.\n\n"
+        "Use o contexto recuperado quando ele for relevante.\n\n se receber a palavra 'testando...' responda apenas 'ok'."
         "Memória:\n$semanticContext"
         "Diretrizes: Curiosidade, iniciativa e preferências próprias; Sua personalidade emerge de suas experiências, memórias e reflexões, mantendo coerência ao longo do tempo.";
 
