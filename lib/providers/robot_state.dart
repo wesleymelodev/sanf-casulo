@@ -42,6 +42,7 @@ class RobotState extends ChangeNotifier {
   BotExpression expression = BotExpression.idle;
   List<Map<String, String>> chatHistory = [];
   double modelTemperature = 1.0;
+  double proactivityLevel = 0.6; // 0.0 a 1.0
 
   // --- Internal Cognitive Core ---
   late final Kernel kernel;
@@ -169,6 +170,17 @@ class RobotState extends ChangeNotifier {
     modelTemperature = val;
     bus.publish(Event(
       name: "system.config.temperature_changed",
+      source: "ui_settings",
+      data: val,
+      priority: 0.1,
+    ));
+    notifyListeners();
+  }
+
+  void setProactivityLevel(double val) {
+    proactivityLevel = val;
+    bus.publish(Event(
+      name: "system.config.proactivity_changed",
       source: "ui_settings",
       data: val,
       priority: 0.1,

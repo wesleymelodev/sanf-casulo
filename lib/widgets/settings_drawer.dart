@@ -65,6 +65,37 @@ class SettingsDrawer extends StatelessWidget {
                     "Valores baixos tornam o SANF mais preciso e literal. Valores altos aumentam a criatividade e a 'loucura' das respostas.",
                     style: TextStyle(color: Colors.white38, fontSize: 11),
                   ),
+
+                  const SizedBox(height: 30),
+                  
+                  // --- MODO CONVERSAÇÃO (PROATIVIDADE) ---
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        "Modo Conversação",
+                        style: TextStyle(color: Colors.white, fontSize: 16),
+                      ),
+                      Text(
+                        "${(state.proactivityLevel * 100).toInt()}%",
+                        style: const TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Slider(
+                    value: state.proactivityLevel,
+                    min: 0.0,
+                    max: 1.0,
+                    divisions: 20,
+                    activeColor: Colors.cyanAccent,
+                    inactiveColor: Colors.white10,
+                    onChanged: (val) => state.setProactivityLevel(val),
+                  ),
+                  const Text(
+                    "Aumente para que o SANF puxe assunto com mais frequência. No máximo, ele tentará falar a cada 1 minuto de tédio.",
+                    style: TextStyle(color: Colors.white38, fontSize: 11),
+                  ),
                 ],
               ),
             ),

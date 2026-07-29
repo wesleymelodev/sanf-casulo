@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import '../models/event.dart';
 import '../core/kernel.dart';
 import 'cognitive_bus.dart';
@@ -9,7 +10,7 @@ class ProactivityEngine extends LifecycleComponent {
   final String name = "proactivity_engine";
   
   final CognitiveBus _bus;
-  final double proactivityLevel; // 0.0 a 1.0
+  double proactivityLevel; // 0.0 a 1.0
   final Random _random = Random();
 
   DateTime _lastInteraction = DateTime.now();
@@ -29,6 +30,13 @@ class ProactivityEngine extends LifecycleComponent {
     _bus.subscribe("cognition.response", handleEvent);
     _bus.subscribe("sensor.vision", handleEvent);
     _bus.subscribe("sensor.audio", handleEvent);
+    
+    // Escuta mudanças dinâmicas no nível de proatividade
+    _bus.subscribe("system.config.proactivity_changed", (e) {
+      proactivityLevel = (e.data as double);
+      _resetIdleThreshold();
+      debugPrint("Proatividade ajustada: $proactivityLevel. Próximo tédio em: ${_currentIdleThreshold.toInt()}s");
+    });
   }
 
   void handleEvent(Event event) {
@@ -79,11 +87,14 @@ class ProactivityEngine extends LifecycleComponent {
   }
 
   void _resetIdleThreshold() {
-    // Base: 300 segundos (5 min). Varia com o nível e um fator random.
-    double base = 86400 / (proactivityLevel + 0.1);
-    // Adiciona uma variação aleatória de +/- 30% para não ser robótico
-    double variance = (base * 0.3) * (_random.nextDouble() * 2 - 1);
-    _currentIdleThreshold = base + variance;
+    // Escala Inversa: 
+    // 0.0 -> ~24 horas (86400s)
+    // 1.0 -> ~1 minuto (60s)
+    double base = 60 + (86400 - 60) * (1.0 - proactivityLevel);
+    
+    // Adiciona variação de +/- 20% para não ser mecânico
+    double variance = (base * 0.2) * (_random.nextDouble() * 2 - 1);
+    _currentIdleThreshold = (base + variance).clamp(60.0, 86400.0);
   }
 
   @override
