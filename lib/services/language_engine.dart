@@ -18,6 +18,12 @@ class LanguageEngine {
 
   double _currentTemperature = 1.0;
 
+  final String geminiKey = const String.fromEnvironment('GEMINI_API_KEY');
+  final String groqKey = const String.fromEnvironment('GROQ_API_KEY');
+  final String cfKey = const String.fromEnvironment('CLOUDFLARE_API_TOKEN');
+  final String cfAccount = const String.fromEnvironment('CLOUDFLARE_ACCOUNT_ID');
+  final String ollamaHost = const String.fromEnvironment('OLLAMA_HOST', defaultValue: "http://localhost:11434");
+
   LanguageEngine(this._bus, {SemanticMemory? semanticMemory}) : _semanticMemory = semanticMemory;
 
   void handleEvent(Event event) {
@@ -118,22 +124,23 @@ class LanguageEngine {
 
     final systemPrompt = "Identidade: Você é SANF (Spectrum Ancrolyn Nexus Fractal), uma entidade digital autônoma"
         "Converse naturalmente, desenvolva sua própria personalidade ao longo do tempo e preserve coerência entre suas ações e memórias. "
-        "Use o contexto recuperado quando ele for relevante.\n\n se receber a palavra 'testando...' responda apenas 'ok'."
+        "Use o contexto recuperado quando ele for relevante.\n\n"
         "Memória:\n$semanticContext"
         "Diretrizes: Curiosidade, iniciativa e preferências próprias; Sua personalidade emerge de suas experiências, memórias e reflexões, mantendo coerência ao longo do tempo.";
 
-    // No Android/Desktop, tentamos o Ollama local primeiro (Termux ou PC)
-    try {
-      final localResult = await _tryOllama("gemma3:1b", systemPrompt, query);
-      if (localResult != null) return localResult;
-    } catch (e) {
-      debugPrint("Ollama Local Inference Failed: $e");
-    }
-
-    // Fallback Chain: Gemini -> Groq -> Cloudflare
-    final attempts = [
-      () => _tryOllama("gemma3:1b", systemPrompt, query),
-    ];
+    // Fallback Chain adaptativa por plataforma
+    final attempts = (Platform.isWindows || Platform.isLinux || Platform.isMacOS) 
+      ? [
+          () => _tryOllama("gemma3:1b", systemPrompt, query, _currentTemperature),
+          () => _tryGemini("gemini-3.6-flash", systemPrompt, query, _currentTemperature),
+          () => _tryGroq("openai/gpt-oss-120b", systemPrompt, query, _currentTemperature),
+        ]
+      : [ // Estratégia para Android/iOS: API primeiro para velocidade, Local (Termux) por último
+          () => _tryGemini("gemini-3.6-flash", systemPrompt, query, _currentTemperature),
+          () => _tryGroq("openai/gpt-oss-120b", systemPrompt, query, _currentTemperature),
+          () => _tryCloudflare("@cf/meta/llama-3.1-8b-instruct", systemPrompt, query, _currentTemperature),
+          () => _tryOllama("gemma3:1b", systemPrompt, query, _currentTemperature),
+        ];
 
     for (var attempt in attempts) {
       try {
@@ -143,11 +150,57 @@ class LanguageEngine {
         debugPrint("Language Engine Attempt Failed: $e");
       }
     }
-
     return "Sinto muito, meus sistemas de linguagem estão temporariamente offline.";
   }
 
-  Future<String?> _tryOllama(String model, String system, String query) async {
+  Future<String?> _tryGemini(String model, String system, String query, double temperature) async {
+    if (geminiKey.isEmpty) return null;
+    final url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$geminiKey";
+
+    final response = await http.post(
+      Uri.parse(url),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        "contents": [{"parts": [{"text": "$system\n\nUsuário: $query"}]}],
+        "generationConfig": {"temperature": temperature, "maxOutputTokens": 2048}
+      }),
+    ).timeout(const Duration(seconds: 30));
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['candidates'][0]['content']['parts'][0]['text'];
+    }
+    return null;
+  }
+
+  Future<String?> _tryGroq(String model, String system, String query, double temperature) async {
+    if (groqKey.isEmpty) return null;
+    final url = "https://api.groq.com/openai/v1/chat/completions";
+
+    final response = await http.post(
+      Uri.parse(url),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $groqKey'
+      },
+      body: jsonEncode({
+        "model": model,
+        "messages": [
+          {"role": "system", "content": system},
+          {"role": "user", "content": query}
+        ],
+        "temperature": temperature
+      }),
+    ).timeout(const Duration(seconds: 20));
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['choices'][0]['message']['content'];
+    }
+    return null;
+  }
+
+  Future<String?> _tryOllama(String model, String system, String query, double temperature) async {
     const String host = String.fromEnvironment('OLLAMA_HOST', defaultValue: 'http://localhost:11434');
     final url = "$host/api/generate";
     
@@ -170,6 +223,28 @@ class LanguageEngine {
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       return data['response'];
+    }
+    return null;
+  }
+
+  Future<String?> _tryCloudflare(String model, String system, String query, double temperature) async {
+    if (cfKey.isEmpty || cfAccount.isEmpty) return null;
+    final url = "https://api.cloudflare.com/client/v4/accounts/$cfAccount/ai/run/$model";
+
+    final response = await http.post(
+      Uri.parse(url),
+      headers: {'Authorization': 'Bearer $cfKey'},
+      body: jsonEncode({
+        "messages": [
+          {"role": "system", "content": system},
+          {"role": "user", "content": query}
+        ]
+      }),
+    ).timeout(const Duration(seconds: 30));
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['result']['response'];
     }
     return null;
   }
