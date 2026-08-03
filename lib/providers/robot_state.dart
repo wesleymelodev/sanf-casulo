@@ -27,6 +27,7 @@ import '../system/knowledge_importer.dart';
 import '../system/audio_sensor.dart';
 import '../system/curiosity_sensor.dart';
 import '../system/vision_sensor.dart';
+import '../services/expression_mapper.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class RobotState extends ChangeNotifier {
@@ -137,6 +138,24 @@ class RobotState extends ChangeNotifier {
     try {
       await tts.setLanguage("pt-BR");
       _setMaleVoice();
+
+      // SINCRONIA DE EXPRESSÃO EM TEMPO REAL
+      tts.setProgressHandler((String text, int start, int end, String word) {
+        // Remove pontuação para garantir o match
+        final cleanWord = word.replaceAll(RegExp(r'[^\w\s]'), '');
+        final expression = ExpressionMapper.getExpressionForWord(cleanWord);
+        
+        if (expression != null) {
+          debugPrint("TTS Sync: Palavra '$cleanWord' disparou expressão $expression");
+          bus.publish(Event(
+            name: "ui.expression.changed",
+            source: "tts_sync",
+            data: expression,
+            priority: 0.2,
+          ));
+        }
+      });
+
       _speechEnabled = await stt.initialize(
         onStatus: (status) {
           isListening = status == 'listening';
@@ -286,6 +305,9 @@ class RobotState extends ChangeNotifier {
     // Filtra asteriscos para o TTS não ler "asterisco" ou pausar estranhamente
     final cleanText = text.replaceAll('*', '');
 
+    // AGENDAMENTO DE EXPRESSÕES (Fallback para quando o handler nativo falha)
+    _scheduleExpressions(cleanText);
+
     try {
       // Remove handlers do Windows que causam erro de thread
       tts.setCompletionHandler(() {});
@@ -303,6 +325,35 @@ class RobotState extends ChangeNotifier {
       debugPrint("Erro silenciado no TTS Windows: $e");
       isSpeaking = false;
       notifyListeners();
+    }
+  }
+
+  void _scheduleExpressions(String fullText) {
+    final words = fullText.split(' ');
+    int currentOffset = 0;
+
+    for (var word in words) {
+      final cleanWord = word.replaceAll(RegExp(r'[^\w\s]'), '');
+      final expression = ExpressionMapper.getExpressionForWord(cleanWord);
+      
+      if (expression != null) {
+        // Estima o tempo em que esta palavra será dita (ms)
+        // 75ms por caractere é uma média segura para velocidade 0.5
+        int delay = (currentOffset * 75).clamp(0, 15000);
+        
+        Timer(Duration(milliseconds: delay), () {
+          if (isSpeaking) {
+            debugPrint("Scheduled Sync: Palavra '$cleanWord' disparou $expression");
+            bus.publish(Event(
+              name: "ui.expression.changed",
+              source: "scheduled_sync",
+              data: expression,
+              priority: 0.2,
+            ));
+          }
+        });
+      }
+      currentOffset += word.length + 1;
     }
   }
 

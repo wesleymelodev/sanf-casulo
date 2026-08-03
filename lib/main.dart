@@ -109,7 +109,10 @@ class ShellPage extends StatelessWidget {
                 if (state.isThinking)
                   const ThinkingIndicator()
                 else
-                  RobotMouth(isSpeaking: state.isSpeaking),
+                  RobotMouth(
+                    isSpeaking: state.isSpeaking,
+                    expression: state.expression,
+                  ),
               ],
             ),
           ),

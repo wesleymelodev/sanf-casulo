@@ -54,9 +54,7 @@ class ResponseGenerator extends LifecycleComponent {
       }
       _lastHomeostasisNotif = now;
     } else if (event.name == "cognition.response") {
-      _setExpression(BotExpression.happy);
-      // Volta para idle depois de um tempo
-      Future.delayed(const Duration(seconds: 5), () => _setExpression(BotExpression.idle));
+      // Expression management now handled in real-time by RobotState/TtsSync
     } else if (event.name == "cognition.reasoning.concluded") {
       _setExpression(BotExpression.pleased);
     }
