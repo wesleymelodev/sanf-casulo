@@ -265,6 +265,10 @@ class LanguageEngine {
     
     // Mapping of keywords to expressions
     final Map<BotExpression, List<String>> expressionMap = {
+      BotExpression.idle: [
+        "aguardando", "espera", "parado", "pronto", "standby", "idle",
+        "esperando", "inativo", "disponível", "ligado", "ativo"
+      ],
       BotExpression.inLove: [
         "amo", "amor", "amando", "amei", "amaria", "apaixonado", "apaixonada",
         "apaixonar", "adoro", "adorando", "adorei", "adorar", "querido", "querida",
@@ -277,6 +281,10 @@ class LanguageEngine {
         "maravilhosa", "fantástico", "fantástica", "viva", "show", "topo", "massa",
         "top", "vitória", "consegui", "conseguimos", "sucesso", "empolgado", "empolgada",
         "empolgar", "brilhante", "perfeito", "perfeição"
+      ],
+      BotExpression.neutralClosed: [
+        "desligado", "repouso", "fechado", "inativo", "dormindo em pé",
+        "silêncio", "pausa", "pausado", "parado", "suspenso", "desativado"
       ],
       BotExpression.dizzy: [
         "confuso", "confusa", "confundir", "confundindo", "tonto", "tonta", "erro",
@@ -291,6 +299,14 @@ class LanguageEngine {
         "lucrar", "lucrando", "pago", "pagar", "pagamento", "fatura", "financeiro",
         "orçamento", "verba", "investimento", "investir", "comprar", "compra",
         "vender", "venda", "taxa", "cobrança", "cash", "saldo"
+      ],
+      BotExpression.sleeping: [
+        "dormir", "dormindo", "sono", "sonhando", "descansar", "descanso",
+        "desligando", "hibernar", "hibernação", "modo noturno", "boa noite", "offline"
+      ],
+      BotExpression.puzzledLeft: [
+        "dúvida", "duvidando", "como assim", "por que", "qual", "quem",
+        "incoerente", "ausente", "faltando", "estranho", "ué"
       ],
       BotExpression.sad: [
         "triste", "tristeza", "melancólico", "melancólica", "lamento", "lamentar",
@@ -309,8 +325,12 @@ class LanguageEngine {
         "estranho", "estranha", "suspeito", "suspeita", "duvidoso", "duvidosa",
         "duvidar", "duvidando", "verificar", "verificando", "verifiquei",
         "segurança", "autenticação", "autenticar", "validar", "validação",
-        "alerta", "cuidado", "perigo", "fraude", "hack", "invasão", "será",
+        "alerta", "cuidado", "perigo", "fraude", "hack", "invasão",
         "desconfiado", "desconfiada", "desconfiar", "revisar", "checar", "checagem"
+      ],
+      BotExpression.puzzledRight: [
+        "o que", "onde", "quando", "incompreensível", "não entendi", "ajuda",
+        "parâmetro", "faltando argumento", "desconhecido", "incompreensão"
       ],
       BotExpression.winking: [
         "piscar", "piscando", "piscou", "piscadela", "brincadeira", "brincar",
@@ -338,6 +358,14 @@ class LanguageEngine {
         "destruição", "socorro", "faiou", "fatal", "tragédia", "trágico",
         "trágica", "desesperado", "desesperada", "desespero", "lágrima", "lágrimas"
       ],
+      BotExpression.sweating: [
+        "suando", "suor", "pressão", "limite", "quase", "tenso", "tensão",
+        "sobrecarga", "memória cheia", "latência", "demora", "apertado"
+      ],
+      BotExpression.annoyed: [
+        "irritado", "irritada", "de novo", "chega", "estresse", "chato",
+        "incomodado", "incomodar", "repetição", "excesso", "poluição"
+      ],
       BotExpression.angry: [
         "bravo", "brava", "raiva", "irado", "irada", "negado", "negada", "negar",
         "negando", "violação", "violado", "violando", "proibido", "proibida",
@@ -351,6 +379,10 @@ class LanguageEngine {
         "satisfeito", "satisfeita", "timidez", "tímido", "tímida", "gentil",
         "gentileza", "honrado", "honrada", "lisonjeado", "lisonjeada", "imprecionado"
       ],
+      BotExpression.masked: [
+        "máscara", "máscaras", "proteção", "protegido", "seguro", "privacidade",
+        "sandbox", "isolado", "quarentena", "oculto", "anonimizado"
+      ],
       BotExpression.pleased: [
         "prazer", "satisfeito", "satisfeita", "satisfação", "concluído", "concluída",
         "concluir", "concluindo", "rotina", "pronto", "pronta", "finalizado",
@@ -363,6 +395,14 @@ class LanguageEngine {
         "pesquisar", "pesquisa", "lendo", "ler", "li", "leitura", "buscando",
         "buscar", "busca", "escaneando", "escanear", "indexando", "indexar",
         "focando", "focar", "foco", "checando", "checar"
+      ],
+      BotExpression.lookingDown: [
+        "baixo", "olhando para baixo", "abaixo", "fundo", "rodapé", "base",
+        "lendo log", "banco de dados", "tabela", "registro"
+      ],
+      BotExpression.lookingUp: [
+        "cima", "olhando para cima", "topo", "acima", "cabeçalho", "aguardando resposta",
+        "escutando", "websocket", "entrada", "terminal", "await"
       ],
     };
 
