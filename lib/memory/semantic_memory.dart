@@ -1,6 +1,7 @@
 import 'package:hive/hive.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import '../models/event.dart';
 import '../services/cognitive_bus.dart';
 import '../core/kernel.dart';
@@ -120,20 +121,29 @@ class SemanticMemory extends LifecycleComponent {
     }
   }
 
-  List<SemanticConcept> recall(String query, {int limit = 5}) {
+  Future<List<SemanticConcept>> recall(String query, {int limit = 5}) async {
+    if (_concepts.isEmpty) return [];
+
     final terms = query.toLowerCase().split(RegExp(r'\W+')).where((t) => t.isNotEmpty).toSet();
+    if (terms.isEmpty) return [];
+
+    // Offload heavy sorting to a background isolate
+    return await compute(_backgroundRecall, _RecallPayload(_concepts.values.toList(), terms, limit));
+  }
+
+  static List<SemanticConcept> _backgroundRecall(_RecallPayload payload) {
+    final ranked = payload.concepts;
     
-    final ranked = _concepts.values.toList();
     ranked.sort((a, b) {
-      double scoreA = _calculateRelevance(a, terms);
-      double scoreB = _calculateRelevance(b, terms);
+      double scoreA = _staticCalculateRelevance(a, payload.terms);
+      double scoreB = _staticCalculateRelevance(b, payload.terms);
       return scoreB.compareTo(scoreA);
     });
 
-    return ranked.take(limit).toList();
+    return ranked.take(payload.limit).toList();
   }
 
-  double _calculateRelevance(SemanticConcept concept, Set<String> queryTerms) {
+  static double _staticCalculateRelevance(SemanticConcept concept, Set<String> queryTerms) {
     if (queryTerms.isEmpty) return concept.confidence;
     
     final conceptTerms = concept.label.toLowerCase().split(RegExp(r'\W+')).toSet();
@@ -164,4 +174,11 @@ class Tuple2<T1, T2> {
   final T1 item1;
   final T2 item2;
   Tuple2(this.item1, this.item2);
+}
+
+class _RecallPayload {
+  final List<SemanticConcept> concepts;
+  final Set<String> terms;
+  final int limit;
+  _RecallPayload(this.concepts, this.terms, this.limit);
 }

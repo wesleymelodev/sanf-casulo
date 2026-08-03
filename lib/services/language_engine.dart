@@ -113,7 +113,7 @@ class LanguageEngine {
     String semanticContext = "";
     if (_semanticMemory != null) {
       final startTime = DateTime.now();
-      final concepts = _semanticMemory!.recall(query, limit: 3);
+      final concepts = await _semanticMemory!.recall(query, limit: 3);
       final endTime = DateTime.now();
       debugPrint("RAG: Recuperação levou ${endTime.difference(startTime).inMilliseconds}ms");
       
