@@ -87,14 +87,17 @@ class ProactivityEngine extends LifecycleComponent {
   }
 
   void _resetIdleThreshold() {
-    // Escala Inversa: 
-    // 0.0 -> ~24 horas (86400s)
-    // 1.0 -> ~1 minuto (60s)
-    double base = 60 + (86400 - 60) * (1.0 - proactivityLevel);
-    
-    // Adiciona variação de +/- 20% para não ser mecânico
-    double variance = (base * 0.2) * (_random.nextDouble() * 2 - 1);
-    _currentIdleThreshold = (base + variance).clamp(60.0, 86400.0);
+    // 1.0 -> Janela de [60s até 60s] (ou até um max curto, ex: 5 min)
+    // 0.0 -> Janela de [60s até 24 horas]
+
+    double minSeconds = 60.0; // 1 minuto
+
+    // Define o limite superior da fatia baseado no proactivityLevel
+    double maxSeconds = 60.0 + (86400.0 - 60.0) * (1.0 - proactivityLevel);
+
+    // Sorteia QUALQUER valor dentro de toda a fatia [minSeconds ... maxSeconds]
+    double range = maxSeconds - minSeconds;
+    _currentIdleThreshold = minSeconds + (_random.nextDouble() * range);
   }
 
   @override

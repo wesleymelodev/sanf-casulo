@@ -116,7 +116,7 @@ class RobotState extends ChangeNotifier {
     audioSensor = AudioSensor(bus);
     curiositySensor = CuriositySensor(bus);
     visionSensor = VisionSensor(bus);
-    cloudSync = CloudSyncService(bus);
+    cloudSync = CloudSyncService(bus, semanticMemory: semanticMemory);
 
     kernel.register(scheduler);
     kernel.register(workspace);

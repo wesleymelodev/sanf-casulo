@@ -52,7 +52,7 @@ class SemanticMemory extends LifecycleComponent {
     
     // Recovery
     try {
-       _loadFromStorage();
+       refreshActiveMemory();
     } catch (e) {
       print("Semantic Box corrupted, clearing...");
       await _box.clear();
@@ -61,7 +61,9 @@ class SemanticMemory extends LifecycleComponent {
     _bus.subscribe("memory.episodic.stored", handleEvent);
   }
 
-  void _loadFromStorage() {
+  /// Recarrega o mapa de conceitos em tempo real a partir do disco
+  void refreshActiveMemory() {
+    _concepts.clear();
     for (var key in _box.keys) {
       final rawData = _box.get(key);
       if (rawData == null) continue;
@@ -75,6 +77,7 @@ class SemanticMemory extends LifecycleComponent {
       );
       _concepts[concept.identifier] = concept;
     }
+    debugPrint("SemanticMemory: ${_concepts.length} conceitos ativos na consciência.");
   }
 
   void handleEvent(Event event) {

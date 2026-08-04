@@ -6,19 +6,21 @@ import 'package:hive/hive.dart';
 import '../models/event.dart';
 import 'cognitive_bus.dart';
 import '../core/kernel.dart';
+import '../memory/semantic_memory.dart';
 
 class CloudSyncService extends LifecycleComponent {
   @override
   final String name = "cloud_sync";
 
   final CognitiveBus _bus;
+  final SemanticMemory? _semanticMemory; // Referência para refresh
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseDatabase _db = FirebaseDatabase.instance;
   
   StreamSubscription? _authSubscription;
   String? _userId;
 
-  CloudSyncService(this._bus);
+  CloudSyncService(this._bus, {this._semanticMemory});
 
   @override
   void initialize() {
@@ -108,6 +110,9 @@ class CloudSyncService extends LifecycleComponent {
       }
 
       debugPrint("CloudSync: Sincronização concluída.");
+      
+      // FORÇA O REFRESH DA MEMÓRIA ATIVA
+      _semanticMemory?.refreshActiveMemory();
       
       // Notifica o sistema que a memória foi atualizada
       _bus.publish(Event(
