@@ -28,28 +28,30 @@ class VisionSensor extends LifecycleComponent {
 
   Future<void> _initDetector() async {
     try {
-      // Tenta carregar o modelo customizado se existir, senão usa o modelo base do ML Kit
-      final directory = await getExternalStorageDirectory();
-      final modelPath = p.join(directory!.path, 'gemma3-1B-it-int4.tflite');
+      // Detector TFLite Customizado (Apenas Android)
+      if (Platform.isAndroid) {
+        final directory = await getExternalStorageDirectory();
+        final modelPath = p.join(directory!.path, 'gemma3-1B-it-int4.tflite');
 
-      if (await File(modelPath).exists()) {
-        final options = LocalObjectDetectorOptions(
-          mode: DetectionMode.single,
-          modelPath: modelPath,
-          classifyObjects: true,
-          multipleObjects: true,
-        );
-        _objectDetector = ObjectDetector(options: options);
-        debugPrint("Vision: Detector Local (Gemma TFLite) carregado: $modelPath");
+        if (await File(modelPath).exists()) {
+          final options = LocalObjectDetectorOptions(
+            mode: DetectionMode.single,
+            modelPath: modelPath,
+            classifyObjects: true,
+            multipleObjects: true,
+          );
+          _objectDetector = ObjectDetector(options: options);
+          debugPrint("Vision: Detector Local (Gemma TFLite) carregado.");
+        } else {
+          debugPrint("Vision: Usando Detector Base do Google (Offline).");
+          _objectDetector = ObjectDetector(options: ObjectDetectorOptions(
+            mode: DetectionMode.single,
+            classifyObjects: true,
+            multipleObjects: true,
+          ));
+        }
       } else {
-        debugPrint("Vision: Modelo gemma3.tflite não encontrado. Usando Detector Base do Google (Offline).");
-        // O ObjectDetectorOptions sem modelPath usa o modelo pré-instalado do Google Play Services
-        final options = ObjectDetectorOptions(
-          mode: DetectionMode.single,
-          classifyObjects: true,
-          multipleObjects: true,
-        );
-        _objectDetector = ObjectDetector(options: options);
+        debugPrint("Vision: Sensores visuais ativos em modo passivo (Desktop).");
       }
     } catch (e) {
       debugPrint("Erro ao inicializar detector visual: $e");

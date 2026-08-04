@@ -26,9 +26,12 @@ class CloudSyncService extends LifecycleComponent {
   void initialize() {
     _authSubscription = _auth.authStateChanges().listen((user) {
       if (user != null) {
+        if (_userId == user.uid) return; // Evita re-triggering no Windows
         _userId = user.uid;
         debugPrint("CloudSync: Usuário autenticado: $_userId");
-        _pullMemoriesFromCloud();
+        
+        // Re-ativado com segurança: delay maior e processamento em fatias
+        Future.delayed(const Duration(seconds: 5), () => _pullMemoriesFromCloud());
       } else {
         _signInAnonymously();
       }
@@ -75,21 +78,28 @@ class CloudSyncService extends LifecycleComponent {
 
   Future<void> _pullMemoriesFromCloud() async {
     if (_userId == null) return;
-    debugPrint("CloudSync: Sincronizando memórias da nuvem...");
+    debugPrint("CloudSync: Iniciando sincronização inteligente...");
 
     try {
-      // 1. Puxar Semântica
-      final semanticSnap = await _db.ref("users/$_userId/semantic").get();
-      if (semanticSnap.exists) {
-        final box = await Hive.openBox('semantic_memory_store');
-        final Map<dynamic, dynamic> cloudData = semanticSnap.value as Map;
-        
-        cloudData.forEach((key, value) {
-          if (!box.containsKey(key)) {
-            box.put(key, Map<String, dynamic>.from(value as Map));
-            debugPrint("CloudSync: Novo conceito recuperado: $key");
-          }
-        });
+      // 1. Puxar Semântica (Apenas se a box local estiver muito defasada ou vazia)
+      final box = await Hive.openBox('semantic_memory_store');
+      
+      // Se já temos muitos conceitos locais, evitamos o PULL total que causa crash
+      if (box.length > 1000) {
+        debugPrint("CloudSync: Memória local robusta (${box.length} itens). Pulando sincronização massiva para estabilidade.");
+      } else {
+        final semanticSnap = await _db.ref("users/$_userId/semantic").limitToLast(500).get();
+        if (semanticSnap.exists) {
+          final Map<dynamic, dynamic> cloudData = semanticSnap.value as Map;
+          int news = 0;
+          cloudData.forEach((key, value) {
+            if (!box.containsKey(key)) {
+              box.put(key, Map<String, dynamic>.from(value as Map));
+              news++;
+            }
+          });
+          if (news > 0) debugPrint("CloudSync: $news novos conceitos recuperados.");
+        }
       }
 
       // 2. Puxar Episódica (Limitado aos últimos 100 para performance)

@@ -35,7 +35,7 @@ class _RobotEyesState extends State<RobotEyes> with SingleTickerProviderStateMix
 
   void _startBlinkLoop() async {
     while (mounted) {
-      await Future.delayed(Duration(seconds: 3 + Random().nextInt(4)));
+      await Future.delayed(Duration(seconds: 1 + Random().nextInt(4)));
       if (mounted) {
         await _blinkController.forward();
         await _blinkController.reverse();
