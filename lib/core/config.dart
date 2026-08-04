@@ -13,7 +13,13 @@ class WorkingMemoryConfig {
 class EpisodicMemoryConfig {
   final int capacity;
   final double recencyHalfLifeSeconds;
-  EpisodicMemoryConfig({this.capacity = 10000, this.recencyHalfLifeSeconds = 86400.0});
+  final int sessionIdleThresholdMinutes;
+
+  EpisodicMemoryConfig({
+    this.capacity = 10000, 
+    this.recencyHalfLifeSeconds = 86400.0,
+    this.sessionIdleThresholdMinutes = 30,
+  });
 }
 
 class SensoryMemoryConfig {

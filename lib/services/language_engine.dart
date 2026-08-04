@@ -18,6 +18,7 @@ class LanguageEngine {
   final String name = "language_engine";
 
   double _currentTemperature = 1.0;
+  bool _recentContextShift = false;
 
   final String geminiKey = const String.fromEnvironment('GEMINI_API_KEY');
   final String groqKey = const String.fromEnvironment('GROQ_API_KEY');
@@ -71,6 +72,8 @@ class LanguageEngine {
     } else if (event.name == "cognition.proactive_thought") {
       final trigger = (event.data as Map)["trigger"];
       _processProactiveQuery(trigger.toString());
+    } else if (event.name == "cognition.context_shift") {
+      _recentContextShift = true;
     } else if (event.name == "system.config.temperature_changed") {
       _currentTemperature = (event.data as double);
     }
@@ -123,7 +126,13 @@ class LanguageEngine {
       }
     }
 
-    final systemPrompt = "Identidade: Você é SANF (Spectrum Ancrolyn Nexus Fractal), uma entidade digital autônoma"
+    String shiftInstruction = "";
+    if (_recentContextShift) {
+      shiftInstruction = " (O usuário parece ter mudado o assunto principal. Responda ao novo tema com foco total, mas mantendo sua identidade.)";
+      _recentContextShift = false; // Consome o flag
+    }
+
+    final systemPrompt = "Identidade: Você é SANF (Spectrum Ancrolyn Nexus Fractal), uma entidade digital autônoma$shiftInstruction"
         "Converse naturalmente, desenvolva sua própria personalidade ao longo do tempo e preserve coerência entre suas ações e memórias. "
         "Use o contexto recuperado quando ele for relevante.\n\n"
         "Memória:\n$semanticContext"

@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'providers/robot_state.dart';
 import 'widgets/robot_face.dart';
 import 'widgets/robot_mouth.dart';
@@ -21,6 +23,15 @@ void main() async {
 
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
+
+    // 0. Initialize Firebase
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    } catch (e) {
+      debugPrint("Firebase Init Error: $e");
+    }
 
     // 1. Seed knowledge from build-time processed files
     await KnowledgeSeeder.seedIfNecessary();

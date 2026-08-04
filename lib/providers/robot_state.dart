@@ -28,6 +28,7 @@ import '../system/audio_sensor.dart';
 import '../system/curiosity_sensor.dart';
 import '../system/vision_sensor.dart';
 import '../services/expression_mapper.dart';
+import '../services/cloud_sync_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class RobotState extends ChangeNotifier {
@@ -67,6 +68,7 @@ class RobotState extends ChangeNotifier {
   late final AudioSensor audioSensor;
   late final CuriositySensor curiositySensor;
   late final VisionSensor visionSensor;
+  late final CloudSyncService cloudSync;
   
   final FlutterTts tts = FlutterTts();
   final SpeechToText stt = SpeechToText();
@@ -114,6 +116,7 @@ class RobotState extends ChangeNotifier {
     audioSensor = AudioSensor(bus);
     curiositySensor = CuriositySensor(bus);
     visionSensor = VisionSensor(bus);
+    cloudSync = CloudSyncService(bus);
 
     kernel.register(scheduler);
     kernel.register(workspace);
@@ -132,6 +135,7 @@ class RobotState extends ChangeNotifier {
     kernel.register(audioSensor);
     kernel.register(curiositySensor);
     kernel.register(visionSensor);
+    kernel.register(cloudSync);
 
     await Hive.initFlutter();
     
