@@ -61,23 +61,39 @@ class SemanticMemory extends LifecycleComponent {
     _bus.subscribe("memory.episodic.stored", handleEvent);
   }
 
-  /// Recarrega o mapa de conceitos em tempo real a partir do disco
+  /// Recarrega o mapa de conceitos em tempo real a partir do disco de forma otimizada
   void refreshActiveMemory() {
     _concepts.clear();
-    for (var key in _box.keys) {
-      final rawData = _box.get(key);
-      if (rawData == null) continue;
-      final data = Map<String, dynamic>.from(rawData);
-      final concept = SemanticConcept(
-        identifier: data['identifier'],
-        label: data['label'],
-        evidenceCount: data['evidence_count'],
-        confidence: data['confidence'],
-        lastConfirmedAt: DateTime.parse(data['last_confirmed_at']),
-      );
-      _concepts[concept.identifier] = concept;
+    
+    // Se a memória for gigantesca (como os 42k do usuário), carregamos apenas os 2000 mais recentes 
+    // ou relevantes para o boot. O resto será acessado sob demanda pelo recall().
+    final keys = _box.keys.toList();
+    if (keys.length > 2000) {
+      debugPrint("SemanticMemory: Base massiva detectada (${keys.length} itens). Carregando apenas o núcleo ativo.");
+      final activeKeys = keys.reversed.take(2000);
+      for (var key in activeKeys) {
+        _loadSingleConcept(key);
+      }
+    } else {
+      for (var key in keys) {
+        _loadSingleConcept(key);
+      }
     }
     debugPrint("SemanticMemory: ${_concepts.length} conceitos ativos na consciência.");
+  }
+
+  void _loadSingleConcept(dynamic key) {
+    final rawData = _box.get(key);
+    if (rawData == null) return;
+    final data = Map<String, dynamic>.from(rawData);
+    final concept = SemanticConcept(
+      identifier: data['identifier'],
+      label: data['label'],
+      evidenceCount: data['evidence_count'],
+      confidence: data['confidence'],
+      lastConfirmedAt: DateTime.parse(data['last_confirmed_at']),
+    );
+    _concepts[concept.identifier] = concept;
   }
 
   void handleEvent(Event event) {

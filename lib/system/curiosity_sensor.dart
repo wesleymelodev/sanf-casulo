@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
+import 'package:html/parser.dart' show parse;
+import 'package:html/dom.dart';
 import '../models/event.dart';
 import '../services/cognitive_bus.dart';
 import '../core/kernel.dart';
@@ -62,22 +64,45 @@ class CuriositySensor extends LifecycleComponent {
       ).timeout(const Duration(seconds: 15));
 
       if (response.statusCode == 200) {
-        // Extração simplificada do corpo da página (em um cenário real usaríamos o pacote 'html')
-        // Aqui simulamos a ingestão do conhecimento para o barramento
-        final String body = response.body;
+        final document = parse(response.body);
         
-        // Dispara evento de conhecimento ingerido (o motor semântico vai absorver isso)
+        // Seleciona os containers de resultados do DuckDuckGo HTML Lite
+        final results = document.querySelectorAll('.result__body');
+        
+        if (results.isEmpty) {
+          debugPrint("Curiosity: Nenhum resultado textual encontrado na página.");
+          return;
+        }
+
+        StringBuffer knowledgeBuffer = StringBuffer();
+        knowledgeBuffer.writeln("Informações recuperadas da web sobre: '$query':\n");
+
+        // Pega os 3 primeiros resultados para não sobrecarregar o contexto
+        for (var i = 0; i < results.length && i < 3; i++) {
+          final title = results[i].querySelector('.result__title')?.text.trim() ?? "Sem título";
+          final snippet = results[i].querySelector('.result__snippet')?.text.trim() ?? "Sem descrição";
+          
+          knowledgeBuffer.writeln("- $title: $snippet");
+        }
+
+        final extractedKnowledge = knowledgeBuffer.toString();
+        
+        // Dispara evento de conhecimento real ingerido
         _bus.publish(Event(
           name: "sensor.knowledge_ingested",
           source: name,
-          data: "Informações recuperadas da web sobre: $query. (Fonte: DuckDuckGo)",
-          confidence: 0.7,
-          priority: 0.4,
+          data: extractedKnowledge,
+          confidence: 0.8,
+          priority: 0.6,
           novelty: 1.0,
-          metadata: {"query": query, "source_type": "web"}
+          metadata: {
+            "query": query, 
+            "source_type": "web",
+            "engine": "DuckDuckGo HTML"
+          }
         ));
         
-        debugPrint("Busca concluída e conhecimento injetado.");
+        debugPrint("Busca concluída e conhecimento REAL injetado.");
       }
     } catch (e) {
       debugPrint("Erro na busca web: $e");

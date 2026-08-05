@@ -19,6 +19,7 @@ class CloudSyncService extends LifecycleComponent {
   
   StreamSubscription? _authSubscription;
   String? _userId;
+  bool _isSyncing = false;
 
   CloudSyncService(this._bus, {this._semanticMemory});
 
@@ -30,8 +31,8 @@ class CloudSyncService extends LifecycleComponent {
         _userId = user.uid;
         debugPrint("CloudSync: Usuário autenticado: $_userId");
         
-        // Re-ativado com segurança: delay maior e processamento em fatias
-        Future.delayed(const Duration(seconds: 5), () => _pullMemoriesFromCloud());
+        // DESATIVADO TOTALMENTE NO BOOT PARA GARANTIR ESTABILIDADE NO WINDOWS
+        // Future.delayed(const Duration(seconds: 10), () => _pullMemoriesFromCloud());
       } else {
         _signInAnonymously();
       }
@@ -77,46 +78,58 @@ class CloudSyncService extends LifecycleComponent {
   }
 
   Future<void> _pullMemoriesFromCloud() async {
-    if (_userId == null) return;
+    if (_userId == null || _isSyncing) return;
+    _isSyncing = true;
     debugPrint("CloudSync: Iniciando sincronização inteligente...");
 
     try {
-      // 1. Puxar Semântica (Apenas se a box local estiver muito defasada ou vazia)
-      final box = await Hive.openBox('semantic_memory_store');
+      // 1. Puxar Semântica (Otimizado)
+      final semanticBox = await Hive.openBox('semantic_memory_store');
       
-      // Se já temos muitos conceitos locais, evitamos o PULL total que causa crash
-      if (box.length > 1000) {
-        debugPrint("CloudSync: Memória local robusta (${box.length} itens). Pulando sincronização massiva para estabilidade.");
+      if (semanticBox.length > 5000) {
+        debugPrint("CloudSync: Memória local muito robusta (${semanticBox.length} itens). Pulando sincronização semântica para estabilidade.");
       } else {
-        final semanticSnap = await _db.ref("users/$_userId/semantic").limitToLast(500).get();
+        final semanticSnap = await _db.ref("users/$_userId/semantic").limitToLast(200).get();
         if (semanticSnap.exists) {
-          final Map<dynamic, dynamic> cloudData = semanticSnap.value as Map;
-          int news = 0;
-          cloudData.forEach((key, value) {
-            if (!box.containsKey(key)) {
-              box.put(key, Map<String, dynamic>.from(value as Map));
-              news++;
-            }
-          });
-          if (news > 0) debugPrint("CloudSync: $news novos conceitos recuperados.");
+          final dynamic rawData = semanticSnap.value;
+          if (rawData is Map) {
+            int news = 0;
+            rawData.forEach((key, value) {
+              if (!semanticBox.containsKey(key)) {
+                semanticBox.put(key, Map<String, dynamic>.from(value as Map));
+                news++;
+              }
+            });
+            if (news > 0) debugPrint("CloudSync: $news novos conceitos recuperados.");
+          }
         }
       }
 
-      // 2. Puxar Episódica (Limitado aos últimos 100 para performance)
+      // 2. Puxar Episódica (Otimizado com containsKey O(1))
+      debugPrint("CloudSync: Buscando memórias episódicas...");
       final episodicSnap = await _db.ref("users/$_userId/episodic").limitToLast(100).get();
+      
       if (episodicSnap.exists) {
-        final box = await Hive.openBox('episodic_memory_store');
-        final Map<dynamic, dynamic> cloudData = episodicSnap.value as Map;
-
-        cloudData.forEach((key, value) {
-          // Firebase keys são strings, mas no Hive Episodic usamos auto-increment (add)
-          // Verificamos se o identificador único já existe na lista
-          final exists = box.values.any((v) => v['identifier'] == key);
-          if (!exists) {
-            box.add(Map<String, dynamic>.from(value as Map));
-            debugPrint("CloudSync: Novo episódio recuperado: $key");
+        final episodicBox = await Hive.openBox('episodic_memory_store');
+        final dynamic rawData = episodicSnap.value;
+        int news = 0;
+        
+        void processItem(String key, dynamic value) {
+          if (value is Map && !episodicBox.containsKey(key)) {
+            episodicBox.put(key, Map<String, dynamic>.from(value));
+            news++;
           }
-        });
+        }
+
+        if (rawData is Map) {
+          rawData.forEach((key, value) => processItem(key.toString(), value));
+        } else if (rawData is List) {
+          for (var i = 0; i < rawData.length; i++) {
+            if (rawData[i] != null) processItem(i.toString(), rawData[i]);
+          }
+        }
+
+        if (news > 0) debugPrint("CloudSync: $news episódios recuperados.");
       }
 
       debugPrint("CloudSync: Sincronização concluída.");
@@ -133,6 +146,8 @@ class CloudSyncService extends LifecycleComponent {
       
     } catch (e) {
       debugPrint("CloudSync: Erro ao puxar dados: $e");
+    } finally {
+      _isSyncing = false;
     }
   }
 

@@ -115,8 +115,8 @@ class EpisodicMemory extends LifecycleComponent {
       recordedAt: now,
     );
 
-    // CRITICAL: only store primitive data
-    _box.add(episode.toRawMap());
+    // CRITICAL: store with UUID as key for instant lookup
+    _box.put(episode.identifier, episode.toRawMap());
     
     if (_box.length > _config.capacity) {
       _box.deleteAt(0);

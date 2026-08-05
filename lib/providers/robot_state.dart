@@ -160,14 +160,10 @@ class RobotState extends ChangeNotifier {
         }
       });
 
-      _speechEnabled = await stt.initialize(
-        onStatus: (status) {
-          isListening = status == 'listening';
-          notifyListeners();
-        },
-      );
+      // O STT agora é inicializado apenas pelo AudioSensor
+      // _speechEnabled = await stt.initialize(...)
     } catch (e) {
-      debugPrint("TTS/STT Init Error: $e");
+      debugPrint("TTS Init Error: $e");
     }
 
     kernel.run();
@@ -236,28 +232,15 @@ class RobotState extends ChangeNotifier {
 
       // 1. TENTATIVA DIRETA: Buscar por "neso" ou "Voz II"
       var target = voices.firstWhere(
-        (v) {
+            (v) {
           String name = v["name"].toString().toLowerCase();
           String locale = v["locale"].toString().toLowerCase();
-          return locale.contains("pt") && (name.contains("neso") || name.contains("voz ii") || name.contains("voz 2"));
+          return locale.contains("pt") && name.contains("ptd");
         },
         orElse: () => null,
       );
 
-      // 2. TENTATIVA ESPECÍFICA GOOGLE MALE (pt-br-x-ptd)
-      if (target == null) {
-        debugPrint("Voz 'neso' não encontrada. Tentando padrão Google Masculino (ptd)...");
-        target = voices.firstWhere(
-          (v) {
-            String name = v["name"].toString().toLowerCase();
-            String locale = v["locale"].toString().toLowerCase();
-            return locale.contains("pt") && name.contains("ptd");
-          },
-          orElse: () => null,
-        );
-      }
-
-      // 3. BUSCA POR GENERO OU IDENTIFICADORES MASCULINOS CONHECIDOS (Fallback)
+      // 2. BUSCA POR GENERO OU IDENTIFICADORES MASCULINOS CONHECIDOS (Fallback)
       if (target == null) {
         debugPrint("Heurística final para voz masculina...");
         target = voices.firstWhere(
