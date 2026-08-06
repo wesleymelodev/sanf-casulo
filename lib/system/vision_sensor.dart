@@ -21,6 +21,10 @@ class VisionSensor extends LifecycleComponent {
 
   @override
   void initialize() {
+    if (Platform.isWindows) {
+      debugPrint("VisionSensor: Desativado no Windows por compatibilidade.");
+      return;
+    }
     debugPrint("VisionSensor inicializado (Modo Local/Privacidade).");
     _initDetector();
     _bus.subscribe("vision.trigger.manual", (e) => _captureAndAnalyze());

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import '../models/event.dart';
@@ -18,6 +19,10 @@ class AudioSensor extends LifecycleComponent {
 
   @override
   void initialize() async {
+    if (Platform.isWindows) {
+      debugPrint("AudioSensor: Desativado no Windows por compatibilidade.");
+      return;
+    }
     try {
       _isInitialized = await _speechToText.initialize(
         onStatus: (status) {

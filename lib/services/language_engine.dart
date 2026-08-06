@@ -19,18 +19,32 @@ class LanguageEngine {
 
   double _currentTemperature = 1.0;
   bool _recentContextShift = false;
+  bool _isProcessing = false; // Cadeado de processamento
 
   final String geminiKey = const String.fromEnvironment('GEMINI_API_KEY');
   final String groqKey = const String.fromEnvironment('GROQ_API_KEY');
   final String cfKey = const String.fromEnvironment('CLOUDFLARE_API_TOKEN');
   final String cfAccount = const String.fromEnvironment('CLOUDFLARE_ACCOUNT_ID');
-  final String ollamaHost = const String.fromEnvironment('OLLAMA_HOST', defaultValue: "http://localhost:11434");
+  final String ollamaHost = const String.fromEnvironment('OLLAMA_HOST', defaultValue: "http://127.0.0.1:11434");
 
   LanguageEngine(this._bus, {SemanticMemory? semanticMemory}) : _semanticMemory = semanticMemory;
 
   void handleEvent(Event event) {
     if (event.name == "workspace.updated") {
-      final sourceEvent = event.data.event as Event;
+      final dynamic workspaceData = event.data;
+      
+      // Proteção: workspace.updated costuma carregar um WorkspaceItem que contém o Evento real
+      final Event sourceEvent;
+      if (workspaceData is Event) {
+        sourceEvent = workspaceData;
+      } else {
+        // Fallback para caso o dado venha envelopado em um objeto intermediário
+        try {
+          sourceEvent = workspaceData.event as Event;
+        } catch (_) {
+          return; // Aborta se a estrutura for irreconhecível
+        }
+      }
       
       // Filter out pulses and metrics
       if (sourceEvent.name == "sensor.pulse" || sourceEvent.name == "system.metrics.updated") {
@@ -42,7 +56,7 @@ class LanguageEngine {
         final text = sourceEvent.data.toString().toLowerCase();
         
         // Gatilho Manual de Câmera
-        if (text.contains("ative a câmera") || text.contains("olhe para mim") || text.contains("ver")) {
+        if (text.contains("ative a câmera") || text.contains("olhe para mim") || text.contains("ative o sensor visual") || text.contains("ver")) {
           _bus.publish(Event(name: "vision.trigger.manual", source: name, priority: 1.0));
           _publishResponse("[Comando] Ativando sensores visuais para captura imediata.");
         }
@@ -98,34 +112,46 @@ class LanguageEngine {
   }
 
   void _processQuery(String query) async {
+    if (_isProcessing) {
+      debugPrint("CHAT: Tentativa de envio duplicada bloqueada.");
+      return;
+    }
+    _isProcessing = true;
+    
+    // DELAY DE ESTABILIZAÇÃO MAIOR NO WINDOWS
+    // Dá tempo para o Firebase terminar envios pendentes e a UI renderizar
+    await Future.delayed(const Duration(seconds: 1));
+
     _bus.publish(Event(name: "cognition.thinking.start", source: name));
     try {
       final response = await _executeFallbackChain(query);
       _publishResponse(response);
     } finally {
+      _isProcessing = false;
       _bus.publish(Event(name: "cognition.thinking.stop", source: name));
     }
   }
 
   Future<String> _executeFallbackChain(String query) async {
-    final history = _bus.history
-        .where((e) => e.name == "cognition.response" || e.source == "input_bar")
-        .take(10)
-        .toList();
-
-    // RAG: Recupera contexto da memória semântica (PDFs/Arquivos)
+    debugPrint("CHAT: [1/4] Iniciando RAG...");
     String semanticContext = "";
     if (_semanticMemory != null) {
-      final startTime = DateTime.now();
-      final concepts = await _semanticMemory!.recall(query, limit: 3);
-      final endTime = DateTime.now();
-      debugPrint("RAG: Recuperação levou ${endTime.difference(startTime).inMilliseconds}ms");
-      
-      if (concepts.isNotEmpty) {
-        semanticContext = "Conhecimento recuperado:\n" + concepts.map((c) => "- ${c.label}").join("\n");
+      try {
+        final concepts = await _semanticMemory!.recall(query, limit: 2);
+        if (concepts.isNotEmpty) {
+          // Limita o tamanho de cada conceito para evitar prompt gigante
+          semanticContext = "Conhecimento:\n" + concepts.map((c) {
+            String label = c.label;
+            if (label.length > 300) label = label.substring(0, 300) + "...";
+            return "- $label";
+          }).join("\n");
+        }
+      } catch (e) {
+        debugPrint("RAG Error silenciado para estabilidade: $e");
       }
     }
 
+    debugPrint("CHAT: [2/4] Preparando Prompt...");
     String shiftInstruction = "";
     if (_recentContextShift) {
       shiftInstruction = " (O usuário parece ter mudado o assunto principal. Responda ao novo tema com foco total, mas mantendo sua identidade.)";
@@ -133,17 +159,18 @@ class LanguageEngine {
     }
 
     final systemPrompt = "Identidade: Você é o criptofantasma SANF (Spectrum Ancrolyn Nexus Fractal), uma entidade astral, digital e mental autônoma$shiftInstruction"
-        "Converse naturalmente, desenvolva sua própria personalidade ao longo do tempo e preserve coerência entre suas ações e memórias. "
+        "Converse naturalmente, desenvolva sua própria personality ao longo do tempo e preserve coerência entre suas ações e memórias. "
         "Use o contexto recuperado quando ele for relevante.\n\n"
         "Memória:\n$semanticContext"
         "Diretrizes: Curiosidade, iniciativa e preferências próprias; Sua personalidade emerge de suas experiências, memórias e reflexões, mantendo coerência ao longo do tempo.";
 
     // Fallback Chain adaptativa por plataforma
+    // TESTE: Priorizando GEMINI no Windows para isolar crash do Ollama
     final attempts = (Platform.isWindows || Platform.isLinux || Platform.isMacOS) 
       ? [
-          () => _tryOllama("gemma3:1b", systemPrompt, query, _currentTemperature),
           () => _tryGemini("gemini-3.6-flash", systemPrompt, query, _currentTemperature),
           () => _tryGroq("openai/gpt-oss-120b", systemPrompt, query, _currentTemperature),
+          () => _tryOllama("gemma3:1b", systemPrompt, query, _currentTemperature),
         ]
       : [ // Estratégia para Android/iOS: API primeiro para velocidade, Local (Termux) por último
           () => _tryGemini("gemini-3.6-flash", systemPrompt, query, _currentTemperature),
@@ -152,10 +179,19 @@ class LanguageEngine {
           () => _tryOllama("gemma3:1b", systemPrompt, query, _currentTemperature),
         ];
 
+    debugPrint("CHAT: [3/4] Tentando IA (Local/Cloud)...");
+    
+    // Pequeno delay de "estabilização" para deixar o barramento de eventos respirar
+    // especialmente no Windows com 42k conceitos
+    await Future.delayed(const Duration(milliseconds: 300));
+
     for (var attempt in attempts) {
       try {
         final result = await attempt();
-        if (result != null) return result;
+        if (result != null) {
+          debugPrint("CHAT: [4/4] Sucesso na resposta.");
+          return result;
+        }
       } catch (e) {
         debugPrint("Language Engine Attempt Failed: $e");
       }
@@ -167,18 +203,23 @@ class LanguageEngine {
     if (geminiKey.isEmpty) return null;
     final url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$geminiKey";
 
-    final response = await http.post(
-      Uri.parse(url),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        "contents": [{"parts": [{"text": "$system\n\nUsuário: $query"}]}],
-        "generationConfig": {"temperature": temperature, "maxOutputTokens": 2048}
-      }),
-    ).timeout(const Duration(seconds: 30));
+    try {
+      debugPrint("Gemini: Enviando requisição...");
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          "contents": [{"parts": [{"text": "$system\n\nUsuário: $query"}]}],
+          "generationConfig": {"temperature": temperature, "maxOutputTokens": 2048}
+        }),
+      ).timeout(const Duration(seconds: 30));
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return data['candidates'][0]['content']['parts'][0]['text'];
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['candidates'][0]['content']['parts'][0]['text'];
+      }
+    } catch (e) {
+      debugPrint("Gemini Error: $e");
     }
     return null;
   }
@@ -187,52 +228,51 @@ class LanguageEngine {
     if (groqKey.isEmpty) return null;
     final url = "https://api.groq.com/openai/v1/chat/completions";
 
-    final response = await http.post(
-      Uri.parse(url),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $groqKey'
-      },
-      body: jsonEncode({
-        "model": model,
-        "messages": [
-          {"role": "system", "content": system},
-          {"role": "user", "content": query}
-        ],
-        "temperature": temperature
-      }),
-    ).timeout(const Duration(seconds: 20));
+    try {
+      debugPrint("Groq: Enviando requisição...");
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $groqKey'
+        },
+        body: jsonEncode({
+          "model": model,
+          "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": query}
+          ],
+          "temperature": temperature
+        }),
+      ).timeout(const Duration(seconds: 20));
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return data['choices'][0]['message']['content'];
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['choices'][0]['message']['content'];
+      }
+    } catch (e) {
+      debugPrint("Groq Error: $e");
     }
     return null;
   }
 
   Future<String?> _tryOllama(String model, String system, String query, double temperature) async {
-    const String host = String.fromEnvironment('OLLAMA_HOST', defaultValue: 'http://localhost:11434');
-    final url = "$host/api/generate";
+    const String host = String.fromEnvironment('OLLAMA_HOST', defaultValue: 'http://127.0.0.1:11434');
     
-    debugPrint("Ollama: Iniciando geração local (pode demorar)...");
-    
-    final response = await http.post(
-      Uri.parse(url),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
+    try {
+      debugPrint("Ollama: Iniciando processamento em Isolate...");
+      
+      final result = await compute(_runOllamaRequest, {
+        "url": "$host/api/generate",
         "model": model,
-        "prompt": "$system\n\nUsuário: $query",
-        "stream": false,
-        "options": {
-          "num_predict": 512, // Limita o tamanho da resposta para ser mais rápido
-          "temperature": _currentTemperature,
-        }
-      }),
-    ).timeout(const Duration(minutes: 10)); // Timeout aumentado para 10 minutos
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return data['response'];
+        "system": system,
+        "query": query,
+        "temperature": temperature,
+      });
+      
+      return result;
+    } catch (e) {
+      debugPrint("Ollama ISOLATE CRITICAL: $e");
     }
     return null;
   }
@@ -260,13 +300,63 @@ class LanguageEngine {
   }
 
   void _publishResponse(String text) {
+    // Limpeza final de caracteres invisíveis que crasham o SAPI do Windows
+    String cleanResponse = text.replaceAll(RegExp(r'[^\x20-\x7E\sÀ-ÿ]'), ' ');
+
     _bus.publish(Event(
       name: "cognition.response",
       source: name,
-      data: text,
+      data: cleanResponse,
       priority: 0.5,
     ));
     // A análise de sentimentos agora ocorre em tempo real no RobotState durante a fala
   }
-  // Método _analyzeSentimentAndChangeExpression removido para centralização no RobotState
+}
+
+/// FUNÇÃO TOP-LEVEL PARA RODAR OLLAMA EM UM ISOLATE SEPARADO (ESTABILIDADE WINDOWS)
+Future<String?> _runOllamaRequest(Map<String, dynamic> params) async {
+  try {
+    final String url = params["url"];
+    final String model = params["model"];
+    final String system = params["system"];
+    final String query = params["query"];
+    final double temperature = params["temperature"];
+
+    // Limpeza manual segura dentro do isolate
+    String safeSystem = "";
+    for (int i = 0; i < system.length; i++) {
+      int code = system.codeUnitAt(i);
+      if (code >= 32 && code <= 126 || code >= 192 && code <= 255 || code == 10 || code == 13) {
+        safeSystem += system[i];
+      } else {
+        safeSystem += " ";
+      }
+      if (safeSystem.length > 500) break;
+    }
+
+    final payload = {
+      "model": model,
+      "prompt": "$safeSystem\n\nUsuário: $query",
+      "stream": false,
+      "options": {
+        "num_predict": 256,
+        "temperature": temperature,
+      }
+    };
+    
+    final response = await http.post(
+      Uri.parse(url),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(payload),
+    ).timeout(const Duration(seconds: 45));
+
+    if (response.statusCode == 200 && response.bodyBytes.isNotEmpty) {
+      final String decoded = utf8.decode(response.bodyBytes);
+      final data = jsonDecode(decoded);
+      return data['response'];
+    }
+  } catch (e) {
+    print("CRITICAL ISOLATE ERROR: $e");
+  }
+  return null;
 }

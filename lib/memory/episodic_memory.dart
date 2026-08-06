@@ -91,9 +91,12 @@ class EpisodicMemory extends LifecycleComponent {
     final now = DateTime.now();
 
     // TEMPORAL FRAGMENTATION LOGIC
+    // Evita resetar a sessão se o robô estiver "ocupado" (ex: mandando mensagem ou pensando)
+    bool isSystemBusy = event.source == "input_bar" || event.name.contains("thinking");
+
     if (_currentSessionId == null || 
         _lastActivityAt == null || 
-        now.difference(_lastActivityAt!).inMinutes > _config.sessionIdleThresholdMinutes) {
+        (!isSystemBusy && now.difference(_lastActivityAt!).inMinutes > _config.sessionIdleThresholdMinutes)) {
       _currentSessionId = const Uuid().v4();
       debugPrint("Fragmentação Temporal: Iniciando nova sessão ID: $_currentSessionId");
       

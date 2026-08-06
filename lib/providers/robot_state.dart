@@ -118,24 +118,30 @@ class RobotState extends ChangeNotifier {
     visionSensor = VisionSensor(bus);
     cloudSync = CloudSyncService(bus, semanticMemory: semanticMemory);
 
-    kernel.register(scheduler);
-    kernel.register(workspace);
-    kernel.register(sensoryMemory);
-    kernel.register(workingMemory);
-    kernel.register(episodicMemory);
-    kernel.register(semanticMemory);
-    kernel.register(attention);
-    kernel.register(associativeEngine);
-    kernel.register(reasoning);
-    kernel.register(proactivityEngine);
-    kernel.register(responseGenerator);
-    kernel.register(homeostasis);
-    kernel.register(metrics);
-    kernel.register(knowledgeImporter);
-    kernel.register(audioSensor);
-    kernel.register(curiositySensor);
-    kernel.register(visionSensor);
-    kernel.register(cloudSync);
+    // REGISTRO COM LOGS DE DIAGNÓSTICO
+    void _register(LifecycleComponent c) {
+      debugPrint("Kernel: Registrando ${c.name}...");
+      kernel.register(c);
+    }
+
+    _register(scheduler);
+    _register(workspace);
+    _register(sensoryMemory);
+    _register(workingMemory);
+    _register(episodicMemory);
+    _register(semanticMemory);
+    _register(attention);
+    _register(associativeEngine);
+    _register(reasoning);
+    _register(proactivityEngine);
+    _register(responseGenerator);
+    _register(homeostasis);
+    _register(metrics);
+    _register(knowledgeImporter);
+    _register(audioSensor);
+    _register(curiositySensor);
+    _register(visionSensor);
+    _register(cloudSync);
 
     await Hive.initFlutter();
     
@@ -144,38 +150,49 @@ class RobotState extends ChangeNotifier {
       _setMaleVoice();
 
       // SINCRONIA DE EXPRESSÃO EM TEMPO REAL
-      tts.setProgressHandler((String text, int start, int end, String word) {
-        // Remove pontuação para garantir o match
-        final cleanWord = word.replaceAll(RegExp(r'[^\w\s]'), '');
-        final expression = ExpressionMapper.getExpressionForWord(cleanWord);
-        
-        if (expression != null) {
-          debugPrint("TTS Sync: Palavra '$cleanWord' disparou expressão $expression");
-          bus.publish(Event(
-            name: "ui.expression.changed",
-            source: "tts_sync",
-            data: expression,
-            priority: 0.2,
-          ));
-        }
-      });
-
-      // O STT agora é inicializado apenas pelo AudioSensor
-      // _speechEnabled = await stt.initialize(...)
+      // AVISO: O setProgressHandler causa crash de Threading no Windows
+      if (!Platform.isWindows) {
+        tts.setProgressHandler((String text, int start, int end, String word) {
+          final cleanWord = word.replaceAll(RegExp(r'[^\w\s]'), '');
+          final expression = ExpressionMapper.getExpressionForWord(cleanWord);
+          
+          if (expression != null) {
+            debugPrint("TTS Sync: Palavra '$cleanWord' disparou expressão $expression");
+            bus.publish(Event(
+              name: "ui.expression.changed",
+              source: "tts_sync",
+              data: expression,
+              priority: 0.2,
+            ));
+          }
+        });
+      } else {
+        debugPrint("TTS: Desativando ProgressHandler nativo no Windows para evitar crash.");
+      }
     } catch (e) {
       debugPrint("TTS Init Error: $e");
     }
 
+    // DELAY DE ESTABILIZAÇÃO (Zen Delay)
+    // Dá tempo para o Windows carregar drivers e Firebase estabilizar
+    debugPrint("Kernel: Aguardando estabilização do sistema (3s)...");
+    await Future.delayed(const Duration(seconds: 3));
+
+    debugPrint("Kernel: Iniciando ciclo cognitivo.");
     kernel.run();
 
     bus.subscribe("cognition.response", _onCognitionResponse);
     bus.subscribe("cognition.thinking.start", (e) {
-      isThinking = true;
-      notifyListeners();
+      scheduleMicrotask(() {
+        isThinking = true;
+        notifyListeners();
+      });
     });
     bus.subscribe("cognition.thinking.stop", (e) {
-      isThinking = false;
-      notifyListeners();
+      scheduleMicrotask(() {
+        isThinking = false;
+        notifyListeners();
+      });
     });
     bus.subscribe("attention.focus.changed", _onAttentionFocusChanged);
     bus.subscribe("system.homeostasis.changed", _onHomeostasisChanged);
@@ -292,17 +309,35 @@ class RobotState extends ChangeNotifier {
     // Filtra asteriscos para o TTS não ler "asterisco" ou pausar estranhamente
     final cleanText = text.replaceAll('*', '');
 
+    // Pequeno delay de "respiro" para o Windows processar o rebuild da UI antes do I/O de áudio
+    await Future.delayed(const Duration(milliseconds: 200));
+
     // AGENDAMENTO DE EXPRESSÕES (Fallback para quando o handler nativo falha)
-    _scheduleExpressions(cleanText);
+    // AVISO: No Windows, timers de sincronia durante o TTS podem causar instabilidade fatal
+    try {
+      if (!Platform.isWindows) {
+        _scheduleExpressions(cleanText);
+      } else {
+        debugPrint("TTS Sync: Agendamento interno desativado no Windows para isolamento de crash.");
+      }
+    } catch (e) {
+      debugPrint("Erro ao agendar expressões: $e");
+    }
+
+    if (Platform.isWindows) {
+      debugPrint("TTS: Iniciando fala em modo isolado...");
+    }
 
     try {
-      // Remove handlers do Windows que causam erro de thread
-      tts.setCompletionHandler(() {});
-      tts.setErrorHandler((msg) {});
+      // Limpeza de buffer e remoção de handlers perigosos no Windows
+      // AVISO: Não sete handlers (mesmo vazios) no Windows para evitar erro de threading nativo
+      if (Platform.isWindows) {
+        await tts.stop(); 
+      }
       
       await tts.speak(cleanText);
       
-      // Timer interno para animação (evita usar canal nativo de conclusão)
+      // Timer interno para animação (evita usar canal nativo de conclusão que crasha o Windows)
       int estimatedDuration = (cleanText.length * 75).clamp(2000, 15000);
       Timer(Duration(milliseconds: estimatedDuration), () {
         isSpeaking = false;
@@ -318,19 +353,22 @@ class RobotState extends ChangeNotifier {
   void _scheduleExpressions(String fullText) {
     final words = fullText.split(' ');
     int currentOffset = 0;
+    int scheduledCount = 0;
 
     for (var word in words) {
+      if (scheduledCount > 15) break; // Limite de 15 expressões por frase para evitar crash de Timers
+      
       final cleanWord = word.replaceAll(RegExp(r'[^\w\s]'), '');
       final expression = ExpressionMapper.getExpressionForWord(cleanWord);
       
       if (expression != null) {
+        scheduledCount++;
         // Estima o tempo em que esta palavra será dita (ms)
         // 75ms por caractere é uma média segura para velocidade 0.5
         int delay = (currentOffset * 75).clamp(0, 15000);
         
         Timer(Duration(milliseconds: delay), () {
-          if (isSpeaking) {
-            debugPrint("Scheduled Sync: Palavra '$cleanWord' disparou $expression");
+          if (isSpeaking && hasListeners) {
             bus.publish(Event(
               name: "ui.expression.changed",
               source: "scheduled_sync",
@@ -370,28 +408,32 @@ class RobotState extends ChangeNotifier {
   void addMessage(String sender, String text) {
     chatHistory.add({"sender": sender, "text": text});
     if (chatHistory.length > 20) chatHistory.removeAt(0);
-    notifyListeners();
     
-    if (Hive.isBoxOpen('episodic_memory_store')) {
-       Hive.box('episodic_memory_store').add({
-        'timestamp': DateTime.now().toIso8601String(),
-        'sender': sender,
-        'text': text,
-        'expression': expression.name, // Save as string to avoid Hive adapter error
-      });
-    }
+    // Decouple UI update from the current execution context to prevent Windows rendering deadlock
+    scheduleMicrotask(() {
+      notifyListeners();
+    });
   }
 
   Future<void> sendMessage(String text) async {
     if (text.isEmpty) return;
-    addMessage("Você", text);
     
-    bus.publish(Event(
-      name: "user.input",
-      source: "input_bar",
-      data: text,
-      priority: 0.9,
-    ));
+    try {
+      addMessage("Você", text);
+
+      // Pequeno respiro para a UI processar a nova mensagem antes da carga cognitiva
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      bus.publish(Event(
+        name: "user.input",
+        source: "input_bar",
+        data: text,
+        priority: 0.9,
+      ));
+      
+    } catch (e) {
+      debugPrint("ERROR in sendMessage: $e");
+    }
   }
 
   Future<void> importRuntimeFile(File file, String fileName) async {

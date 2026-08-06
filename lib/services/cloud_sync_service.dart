@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
@@ -19,7 +20,13 @@ class CloudSyncService extends LifecycleComponent {
   
   StreamSubscription? _authSubscription;
   String? _userId;
-  bool _isSyncing = false;
+  bool _bootReady = false;
+  bool _isAIBusy = false; // Flag para evitar conflito de rede
+
+  // --- FILA DE SINCRONIZAÇÃO DE SAÍDA (DEBOUNCE) ---
+  final Map<String, dynamic> _episodicQueue = {};
+  final Map<String, dynamic> _semanticQueue = {};
+  Timer? _syncTimer;
 
   CloudSyncService(this._bus, {this._semanticMemory});
 
@@ -27,20 +34,31 @@ class CloudSyncService extends LifecycleComponent {
   void initialize() {
     _authSubscription = _auth.authStateChanges().listen((user) {
       if (user != null) {
-        if (_userId == user.uid) return; // Evita re-triggering no Windows
+        if (_userId == user.uid) return;
         _userId = user.uid;
         debugPrint("CloudSync: Usuário autenticado: $_userId");
         
-        // DESATIVADO TOTALMENTE NO BOOT PARA GARANTIR ESTABILIDADE NO WINDOWS
-        // Future.delayed(const Duration(seconds: 10), () => _pullMemoriesFromCloud());
+        // NO WINDOWS: DESATIVADO PULL AUTOMÁTICO PARA TESTE DE ESTABILIDADE
+        if (Platform.isAndroid || Platform.isIOS) {
+          Future.delayed(const Duration(seconds: 15), () => _pullMemoriesFromCloud());
+        }
+
+        // Habilita o PUSH apenas após 30 segundos de boot estável
+        Future.delayed(const Duration(seconds: 30), () {
+          _bootReady = true;
+          debugPrint("CloudSync: Sistema de PUSH (Saída) pronto.");
+        });
       } else {
         _signInAnonymously();
       }
     });
 
-    // Inscreve-se em eventos de persistência para espelhar na nuvem
     _bus.subscribe("memory.episodic.stored", _onEpisodicStored);
     _bus.subscribe("memory.semantic.consolidated", _onSemanticConsolidated);
+    
+    // Escuta o estado da IA para evitar "fogo cruzado" na rede do Windows
+    _bus.subscribe("cognition.thinking.start", (e) => _isAIBusy = true);
+    _bus.subscribe("cognition.thinking.stop", (e) => _isAIBusy = false);
   }
 
   Future<void> _signInAnonymously() async {
@@ -52,102 +70,102 @@ class CloudSyncService extends LifecycleComponent {
   }
 
   void _onEpisodicStored(Event event) {
-    if (_userId == null) return;
-    
-    // O dado do episódio está em event.data (classe Episode)
-    // Usamos toRawMap para garantir compatibilidade com JSON/Firebase
+    if (_userId == null || !_bootReady) return;
     final dynamic episode = event.data;
     try {
       final data = episode.toRawMap();
-      _db.ref("users/$_userId/episodic/${data['identifier']}").set(data);
+      _episodicQueue[data['identifier']] = data;
+      _triggerDelayedSync();
     } catch (e) {
-      debugPrint("CloudSync: Erro ao sincronizar episódio: $e");
+      debugPrint("CloudSync: Erro ao enfileirar episódio: $e");
     }
   }
 
   void _onSemanticConsolidated(Event event) {
-    if (_userId == null) return;
-
+    if (_userId == null || !_bootReady) return;
     final dynamic concept = event.data;
     try {
       final data = concept.toRawMap();
-      _db.ref("users/$_userId/semantic/${data['identifier']}").set(data);
+      _semanticQueue[data['identifier']] = data;
+      _triggerDelayedSync();
     } catch (e) {
-      debugPrint("CloudSync: Erro ao sincronizar conceito: $e");
+      debugPrint("CloudSync: Erro ao enfileirar conceito: $e");
+    }
+  }
+
+  void _triggerDelayedSync() {
+    _syncTimer?.cancel();
+    _syncTimer = Timer(const Duration(seconds: 5), () => _processQueues());
+  }
+
+  Future<void> _processQueues() async {
+    if (_userId == null || !_bootReady) return;
+
+    // REGRA DE OURO: Se a IA estiver pensando ou o barramento estiver cheio, 
+    // adiamos a sincronização para evitar crash de sockets no Windows.
+    if (_isAIBusy || _bus.pendingCount > 0) {
+      debugPrint("CloudSync: Rede ocupada (IA pensando). Adiado em 10s...");
+      _syncTimer?.cancel();
+      _syncTimer = Timer(const Duration(seconds: 10), () => _processQueues());
+      return;
+    }
+
+    try {
+      final Map<String, dynamic> updates = {};
+
+      if (_episodicQueue.isNotEmpty) {
+        debugPrint("CloudSync: Preparando batch de episódios...");
+        final batch = Map<String, dynamic>.from(_episodicQueue);
+        _episodicQueue.clear();
+        batch.forEach((id, data) {
+          updates["episodic/$id"] = data;
+        });
+      }
+
+      if (_semanticQueue.isNotEmpty) {
+        debugPrint("CloudSync: Preparando batch de conceitos...");
+        final batch = Map<String, dynamic>.from(_semanticQueue);
+        _semanticQueue.clear();
+        batch.forEach((id, data) {
+          // Se for marcado como lixo pelo usuário, removemos do Firebase
+          if (data['is_garbage'] == true) {
+            updates["semantic/$id"] = null; 
+            debugPrint("CloudSync: Removendo conceito deletado do Firebase: $id");
+          } else {
+            updates["semantic/$id"] = data;
+          }
+        });
+      }
+
+      if (updates.isNotEmpty) {
+        debugPrint("CloudSync: Batch preparado. Aguardando respiro de rede...");
+        await Future.delayed(const Duration(seconds: 1));
+        
+        debugPrint("CloudSync: Enviando batch atômico para o Firebase (${updates.length} itens)...");
+        await _db.ref("users/$_userId").update(updates).timeout(const Duration(seconds: 15));
+        debugPrint("CloudSync: Batch enviado com sucesso.");
+      }
+    } catch (e) {
+      debugPrint("CloudSync Batch Error: $e");
+      // Se falhar, as filas já foram limpas para evitar loops de crash
     }
   }
 
   Future<void> _pullMemoriesFromCloud() async {
-    if (_userId == null || _isSyncing) return;
-    _isSyncing = true;
-    debugPrint("CloudSync: Iniciando sincronização inteligente...");
-
+    if (_userId == null) return;
     try {
-      // 1. Puxar Semântica (Otimizado)
-      final semanticBox = await Hive.openBox('semantic_memory_store');
-      
-      if (semanticBox.length > 5000) {
-        debugPrint("CloudSync: Memória local muito robusta (${semanticBox.length} itens). Pulando sincronização semântica para estabilidade.");
-      } else {
-        final semanticSnap = await _db.ref("users/$_userId/semantic").limitToLast(200).get();
-        if (semanticSnap.exists) {
-          final dynamic rawData = semanticSnap.value;
-          if (rawData is Map) {
-            int news = 0;
-            rawData.forEach((key, value) {
-              if (!semanticBox.containsKey(key)) {
-                semanticBox.put(key, Map<String, dynamic>.from(value as Map));
-                news++;
-              }
-            });
-            if (news > 0) debugPrint("CloudSync: $news novos conceitos recuperados.");
-          }
-        }
-      }
-
-      // 2. Puxar Episódica (Otimizado com containsKey O(1))
-      debugPrint("CloudSync: Buscando memórias episódicas...");
-      final episodicSnap = await _db.ref("users/$_userId/episodic").limitToLast(100).get();
-      
+      final episodicSnap = await _db.ref("users/$_userId/episodic").limitToLast(50).get();
       if (episodicSnap.exists) {
-        final episodicBox = await Hive.openBox('episodic_memory_store');
-        final dynamic rawData = episodicSnap.value;
-        int news = 0;
-        
-        void processItem(String key, dynamic value) {
-          if (value is Map && !episodicBox.containsKey(key)) {
-            episodicBox.put(key, Map<String, dynamic>.from(value));
-            news++;
+        final box = await Hive.openBox('episodic_memory_store');
+        final Map<dynamic, dynamic> cloudData = episodicSnap.value as Map;
+        cloudData.forEach((key, value) {
+          if (!box.containsKey(key)) {
+            box.put(key, Map<String, dynamic>.from(value as Map));
           }
-        }
-
-        if (rawData is Map) {
-          rawData.forEach((key, value) => processItem(key.toString(), value));
-        } else if (rawData is List) {
-          for (var i = 0; i < rawData.length; i++) {
-            if (rawData[i] != null) processItem(i.toString(), rawData[i]);
-          }
-        }
-
-        if (news > 0) debugPrint("CloudSync: $news episódios recuperados.");
+        });
       }
-
-      debugPrint("CloudSync: Sincronização concluída.");
-      
-      // FORÇA O REFRESH DA MEMÓRIA ATIVA
-      _semanticMemory?.refreshActiveMemory();
-      
-      // Notifica o sistema que a memória foi atualizada
-      _bus.publish(Event(
-        name: "memory.cloud.synced",
-        source: name,
-        priority: 0.3,
-      ));
-      
     } catch (e) {
-      debugPrint("CloudSync: Erro ao puxar dados: $e");
-    } finally {
-      _isSyncing = false;
+      debugPrint("CloudSync: Pull error: $e");
     }
   }
 
@@ -156,6 +174,7 @@ class CloudSyncService extends LifecycleComponent {
 
   @override
   void shutdown() {
+    _syncTimer?.cancel();
     _authSubscription?.cancel();
     _bus.unsubscribe("memory.episodic.stored", _onEpisodicStored);
     _bus.unsubscribe("memory.semantic.consolidated", _onSemanticConsolidated);

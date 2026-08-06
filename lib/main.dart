@@ -143,40 +143,27 @@ class ShellPage extends StatelessWidget {
             ),
           ),
 
-          // Chat Overlay: Scrollable balloon with max height
+          // Chat Overlay: Simplified bubble to avoid Windows scroll crashes
           if (state.chatHistory.isNotEmpty)
             Positioned(
               bottom: 130,
               left: 50,
               right: 50,
               child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 200, maxWidth: 600),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.7),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.cyanAccent.withOpacity(0.3)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.cyanAccent.withOpacity(0.1),
-                          blurRadius: 10,
-                          spreadRadius: 2,
-                        )
-                      ],
-                    ),
-                    child: SingleChildScrollView(
-                      reverse: true, // Auto-scroll to bottom
-                      child: Text(
-                        state.chatHistory.last['text'] ?? "",
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.cyanAccent,
-                          fontSize: 18,
-                          height: 1.4,
-                        ),
-                      ),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.cyanAccent.withOpacity(0.3)),
+                  ),
+                  child: Text(
+                    state.chatHistory.last['text'] ?? "",
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.cyanAccent,
+                      fontSize: 18,
+                      height: 1.4,
                     ),
                   ),
                 ),

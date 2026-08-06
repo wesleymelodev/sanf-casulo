@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../services/cognitive_bus.dart';
 
@@ -27,15 +28,28 @@ class Kernel {
     _components.add(component);
   }
 
-  void initialize() {
+  Future<void> initialize() async {
     for (var component in _components) {
-      component.initialize();
+      try {
+        debugPrint("Kernel Component: Inicializando ${component.name}...");
+        component.initialize();
+        // Delay de segurança entre componentes para evitar pico de I/O no Windows
+        if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+          await Future.delayed(const Duration(milliseconds: 300));
+        }
+      } catch (e) {
+        debugPrint("ERRO CRÍTICO no componente ${component.name}: $e");
+      }
     }
   }
 
   void update(double deltaTime) {
     for (var component in _components) {
-      component.update(deltaTime);
+      try {
+        component.update(deltaTime);
+      } catch (e) {
+        debugPrint("ERRO DE CICLO no componente ${component.name}: $e");
+      }
     }
   }
 
@@ -46,10 +60,12 @@ class Kernel {
     }
   }
 
-  void run() {
+  void run() async {
     running = true;
     startedAt = DateTime.now();
-    initialize();
+    
+    // Aguarda inicialização sequencial estável
+    await initialize();
 
     DateTime previous = startedAt!;
     _timer = Timer.periodic(Duration(milliseconds: (targetCycleSeconds * 1000).toInt()), (timer) {

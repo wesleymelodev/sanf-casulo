@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'package:flutter/foundation.dart';
 import '../models/event.dart';
 
 typedef EventHandler = void Function(Event event);
@@ -24,30 +25,55 @@ class CognitiveBus {
 
   void publish(Event event) {
     _queue.add(event);
-    // Sort by saliency (descending)
-    _queue.sort((a, b) => b.calculateCognitiveScore().compareTo(a.calculateCognitiveScore()));
   }
 
   Event? nextEvent() {
     if (_queue.isEmpty) return null;
+
+    // Filtro de segurança para ordenação no Windows
+    try {
+      if (_queue.length > 1) {
+        _queue.sort((a, b) {
+          final scoreA = a.calculateCognitiveScore();
+          final scoreB = b.calculateCognitiveScore();
+          return scoreB.compareTo(scoreA);
+        });
+      }
+    } catch (e) {
+      debugPrint("BUS: Erro na ordenação de eventos (silenciado): $e");
+    }
+
     return _queue.removeAt(0);
   }
 
+  int _dispatchRecursionLevel = 0;
+  static const int _maxRecursion = 10;
+
   int dispatch(Event event) {
-    final handlers = [
-      ...(_listeners[event.name] ?? []),
-      ...(_listeners['*'] ?? []),
-    ];
-
-    _history.addLast(event);
-    if (_history.length > _historyLimit) {
-      _history.removeFirst();
+    if (_dispatchRecursionLevel > _maxRecursion) {
+      debugPrint("BUS CRITICAL: Recursão infinita detectada no evento ${event.name}! Bloqueando.");
+      return 0;
     }
 
-    for (var handler in handlers) {
-      handler(event);
+    _dispatchRecursionLevel++;
+    try {
+      final handlers = [
+        ...(_listeners[event.name] ?? []),
+        ...(_listeners['*'] ?? []),
+      ];
+
+      _history.addLast(event);
+      if (_history.length > _historyLimit) {
+        _history.removeFirst();
+      }
+
+      for (var handler in handlers) {
+        handler(event);
+      }
+      return handlers.length;
+    } finally {
+      _dispatchRecursionLevel--;
     }
-    return handlers.length;
   }
 
   int get pendingCount => _queue.length;

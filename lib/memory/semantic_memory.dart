@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:hive/hive.dart';
 import 'package:crypto/crypto.dart';
 import 'dart:convert';
@@ -14,6 +16,8 @@ class SemanticConcept {
   int evidenceCount;
   double confidence;
   DateTime lastConfirmedAt;
+  bool isProtected; // Flag de proteção
+  bool isGarbage;   // Flag para priorizar exclusão
 
   SemanticConcept({
     required this.identifier,
@@ -21,6 +25,8 @@ class SemanticConcept {
     required this.evidenceCount,
     required this.confidence,
     required this.lastConfirmedAt,
+    this.isProtected = false,
+    this.isGarbage = false,
   });
 
   Map<String, dynamic> toRawMap() {
@@ -30,6 +36,8 @@ class SemanticConcept {
       'evidence_count': evidenceCount,
       'confidence': confidence,
       'last_confirmed_at': lastConfirmedAt.toIso8601String(),
+      'is_protected': isProtected,
+      'is_garbage': isGarbage,
     };
   }
 }
@@ -42,6 +50,9 @@ class SemanticMemory extends LifecycleComponent {
   final SemanticMemoryConfig _config;
   late Box _box;
   final Map<String, SemanticConcept> _concepts = {};
+  
+  bool _isPruning = false;
+  static const int maxConceptLimit = 10000; // Teto para evitar crash no Windows
 
   SemanticMemory(this._bus, {SemanticMemoryConfig? config})
       : _config = config ?? SemanticMemoryConfig();
@@ -58,6 +69,12 @@ class SemanticMemory extends LifecycleComponent {
       await _box.clear();
     }
     
+    // GATILHO DE FAXINA NO BOOT: Se a base estiver inchada, limpa logo após abrir
+    // AUMENTADO PARA 120s PARA EVITAR QUALQUER CONFLITO COM O BOOT/CHAT INICIAL
+    if (_box.length > maxConceptLimit) {
+      Future.delayed(const Duration(seconds: 120), () => _runSelectiveForget());
+    }
+    
     _bus.subscribe("memory.episodic.stored", handleEvent);
   }
 
@@ -65,17 +82,16 @@ class SemanticMemory extends LifecycleComponent {
   void refreshActiveMemory() {
     _concepts.clear();
     
-    // Se a memória for gigantesca (como os 42k do usuário), carregamos apenas os 2000 mais recentes 
-    // ou relevantes para o boot. O resto será acessado sob demanda pelo recall().
-    final keys = _box.keys.toList();
-    if (keys.length > 2000) {
-      debugPrint("SemanticMemory: Base massiva detectada (${keys.length} itens). Carregando apenas o núcleo ativo.");
-      final activeKeys = keys.reversed.take(2000);
-      for (var key in activeKeys) {
+    final int totalKeys = _box.length;
+    if (totalKeys > 2000) {
+      debugPrint("SemanticMemory: Base massiva detectada ($totalKeys itens). Carregando apenas o núcleo ativo.");
+      // Pega as últimas 2000 chaves sem converter tudo para lista primeiro
+      for (int i = totalKeys - 1; i >= totalKeys - 2000; i--) {
+        final key = _box.keyAt(i);
         _loadSingleConcept(key);
       }
     } else {
-      for (var key in keys) {
+      for (var key in _box.keys) {
         _loadSingleConcept(key);
       }
     }
@@ -92,6 +108,8 @@ class SemanticMemory extends LifecycleComponent {
       evidenceCount: data['evidence_count'],
       confidence: data['confidence'],
       lastConfirmedAt: DateTime.parse(data['last_confirmed_at']),
+      isProtected: data['is_protected'] ?? false,
+      isGarbage: data['is_garbage'] ?? false,
     );
     _concepts[concept.identifier] = concept;
   }
@@ -101,21 +119,35 @@ class SemanticMemory extends LifecycleComponent {
     
     final Episode episode = event.data;
     
-    // FILTRO SEMÂNTICO: Apenas consolida fatos de aprendizado ou diálogos
-    if (!episode.event.name.contains("learning.fact") && 
-        !episode.event.name.contains("user.input") &&
-        !episode.event.name.contains("cognition.response")) {
-      return;
+    // FILTRO SEMÂNTICO: Consolida fatos de aprendizado. 
+    // Diálogos são ignorados no Windows para evitar crash de I/O em base massiva.
+    bool shouldIndex = episode.event.name.contains("learning.fact");
+    if (!shouldIndex && !Platform.isWindows) {
+      shouldIndex = episode.event.name.contains("user.input") || 
+                    episode.event.name.contains("cognition.response");
     }
+
+    if (!shouldIndex) return;
 
     final identity = _conceptIdentity(episode.event);
     final id = sha256.convert(utf8.encode(identity.item1)).toString();
     final label = identity.item2;
 
+    // Detecta comando de proteção ou descarte
+    final String rawText = episode.event.data.toString().toLowerCase();
+    
+    bool shouldProtect = rawText.startsWith("lembre-se") ||
+                         rawText.startsWith("grave isso") ||
+                         rawText.startsWith("memorize isso");
+                         
+    bool shouldDiscard = rawText.startsWith("delete isso") ||
+                         rawText.startsWith("esqueça isso") ||
+                         rawText.startsWith("remova isso");
+
     final existing = _concepts[id];
     final evidenceCount = (existing?.evidenceCount ?? 0) + 1;
     final prevConfidence = existing?.confidence ?? 0.0;
-    final confidence = 1.0 - (1.0 - prevConfidence) * (1.0 - episode.event.confidence);
+    final confidence = shouldDiscard ? 0.0 : 1.0 - (1.0 - prevConfidence) * (1.0 - episode.event.confidence);
 
     final concept = SemanticConcept(
       identifier: id,
@@ -123,10 +155,17 @@ class SemanticMemory extends LifecycleComponent {
       evidenceCount: evidenceCount,
       confidence: confidence,
       lastConfirmedAt: DateTime.now(),
+      isProtected: (existing?.isProtected ?? false) || shouldProtect,
+      isGarbage: (existing?.isGarbage ?? false) || shouldDiscard,
     );
 
     _concepts[id] = concept;
     _box.put(id, concept.toRawMap());
+
+    // Gatilho de Memória Seletiva (GC Cognitivo)
+    if (_box.length > maxConceptLimit && !_isPruning) {
+      _runSelectiveForget();
+    }
 
     if (evidenceCount >= _config.minimumEvidence) {
       _bus.publish(Event(
@@ -140,26 +179,99 @@ class SemanticMemory extends LifecycleComponent {
     }
   }
 
-  Future<List<SemanticConcept>> recall(String query, {int limit = 5}) async {
+  Future<List<SemanticConcept>> recall(String query, {int limit = 3}) async {
     if (_concepts.isEmpty) return [];
 
-    final terms = query.toLowerCase().split(RegExp(r'\W+')).where((t) => t.isNotEmpty).toSet();
+    final terms = query.toLowerCase().split(RegExp(r'\W+')).where((t) => t.length > 3).toSet();
     if (terms.isEmpty) return [];
 
-    // Offload heavy sorting to a background isolate
+    // Offload search and ranking to a background isolate to keep UI thread fluid on Windows
     return await compute(_backgroundRecall, _RecallPayload(_concepts.values.toList(), terms, limit));
   }
 
   static List<SemanticConcept> _backgroundRecall(_RecallPayload payload) {
-    final ranked = payload.concepts;
+    final List<SemanticConcept> candidates = [];
     
-    ranked.sort((a, b) {
+    for (var concept in payload.concepts) {
+      if (payload.terms.any((term) => concept.label.toLowerCase().contains(term))) {
+        candidates.add(concept);
+      }
+      if (candidates.length >= 50) break;
+    }
+
+    if (candidates.isEmpty) return [];
+
+    candidates.sort((a, b) {
       double scoreA = _staticCalculateRelevance(a, payload.terms);
       double scoreB = _staticCalculateRelevance(b, payload.terms);
       return scoreB.compareTo(scoreA);
     });
 
-    return ranked.take(payload.limit).toList();
+    return candidates.take(payload.limit).toList();
+  }
+
+  /// Algoritmo de Esquecimento Seletivo: Remove o que é irrelevante ou pouco reforçado
+  Future<void> _runSelectiveForget() async {
+    if (_isPruning) return;
+    _isPruning = true;
+    debugPrint("SemanticMemory: Iniciando Pruning Cognitivo (Faxina de Boot)...");
+
+    try {
+      final int totalItems = _box.length;
+      final int targetSize = maxConceptLimit;
+      
+      // 1. Coleta apenas os metadados essenciais para economizar RAM
+      final List<MapEntry<dynamic, double>> scores = [];
+      
+      for (var key in _box.keys) {
+        final v = _box.get(key);
+        if (v == null) continue;
+        
+        // Critério de Importância simplificado: Frequência + Confiança
+        double evidence = (v['evidence_count'] ?? 0).toDouble();
+        double confidence = (v['confidence'] ?? 0.0).toDouble();
+        bool isProtected = v['is_protected'] ?? false;
+        bool isGarbage = v['is_garbage'] ?? false;
+
+        // Score de decisão: Lixo vai pra -999k, Protegido pra +999k
+        double score = isProtected ? 999999.0 : 
+                       isGarbage ? -999999.0 : 
+                       (evidence * 0.5) + (confidence * 0.5);
+        
+        scores.add(MapEntry(key, score));
+        
+        // Pequena pausa a cada 1000 itens para o Windows não achar que o app travou
+        if (scores.length % 1000 == 0) {
+          await Future.delayed(const Duration(milliseconds: 10));
+        }
+      }
+
+      // 2. Ordena por relevância (piores primeiro)
+      scores.sort((a, b) => a.value.compareTo(b.value));
+
+      // 3. Remove o excesso (de 42k para 10k)
+      int removeCount = totalItems - targetSize;
+      if (removeCount <= 0) removeCount = (totalItems * 0.2).toInt();
+
+      debugPrint("SemanticMemory: Deletando $removeCount itens irrelevantes...");
+      
+      for (int i = 0; i < removeCount; i++) {
+        final key = scores[i].key;
+        await _box.delete(key);
+        _concepts.remove(key);
+        
+        if (i % 500 == 0) {
+          await Future.delayed(const Duration(milliseconds: 5));
+        }
+      }
+
+      debugPrint("SemanticMemory: Faxina concluída. Memória otimizada para $targetSize itens.");
+      refreshActiveMemory(); // Recarrega a consciência com os dados limpos
+    } catch (e) {
+      debugPrint("SemanticMemory Error no GC: $e");
+    } finally {
+      _isPruning = false;
+    }
   }
 
   static double _staticCalculateRelevance(SemanticConcept concept, Set<String> queryTerms) {

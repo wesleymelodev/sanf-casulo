@@ -29,7 +29,8 @@ class KnowledgeImporter extends LifecycleComponent {
       await folder.create(recursive: true);
     }
     
-    _scanKnowledgeBase();
+    // DELAY DE SEGURANÇA: Espera o Kernel e a Memória Semântica estabilizarem
+    Future.delayed(const Duration(seconds: 15), () => _scanKnowledgeBase());
   }
 
   Future<void> _scanKnowledgeBase() async {
