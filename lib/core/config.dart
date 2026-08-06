@@ -16,7 +16,7 @@ class EpisodicMemoryConfig {
   final int sessionIdleThresholdMinutes;
 
   EpisodicMemoryConfig({
-    this.capacity = 10000, 
+    this.capacity = 20000,
     this.recencyHalfLifeSeconds = 86400.0,
     this.sessionIdleThresholdMinutes = 30,
   });

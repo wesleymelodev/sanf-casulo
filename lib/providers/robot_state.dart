@@ -80,7 +80,12 @@ class RobotState extends ChangeNotifier {
   void _initializeCore() async {
     bus = CognitiveBus();
     kernel = Kernel(targetCycleSeconds: 0.01);
-    
+
+    // Hive is already initialized in main.dart
+    final settingsBox = await Hive.openBox('settings');
+    modelTemperature = settingsBox.get('modelTemperature', defaultValue: 1.0);
+    proactivityLevel = settingsBox.get('proactivityLevel', defaultValue: 0.6);
+
     // Request permissions for Android
     if (Platform.isAndroid) {
       try {
@@ -106,7 +111,7 @@ class RobotState extends ChangeNotifier {
     associativeEngine = AssociativeEngine(bus);
     reasoning = ReasoningEngine(bus);
     languageEngine = LanguageEngine(bus, semanticMemory: semanticMemory);
-    proactivityEngine = ProactivityEngine(bus, proactivityLevel: 0.6);
+    proactivityEngine = ProactivityEngine(bus, proactivityLevel: proactivityLevel);
     responseGenerator = ResponseGenerator(bus);
 
     homeostasis = Homeostasis(bus);
@@ -142,8 +147,6 @@ class RobotState extends ChangeNotifier {
     _register(visionSensor);
     _register(cloudSync);
 
-    await Hive.initFlutter();
-    
     try {
       await tts.setLanguage("pt-BR");
       _setMaleVoice();
@@ -199,10 +202,25 @@ class RobotState extends ChangeNotifier {
     
     bus.subscribe("workspace.updated", (e) => languageEngine.handleEvent(e));
     bus.subscribe("cognition.proactive_thought", (e) => languageEngine.handleEvent(e));
+
+    // Publish initial persisted settings to all engines
+    bus.publish(Event(
+      name: "system.config.temperature_changed",
+      source: "kernel_boot",
+      data: modelTemperature,
+      priority: 0.0,
+    ));
+    bus.publish(Event(
+      name: "system.config.proactivity_changed",
+      source: "kernel_boot",
+      data: proactivityLevel,
+      priority: 0.0,
+    ));
   }
 
   void setModelTemperature(double val) {
     modelTemperature = val;
+    Hive.box('settings').put('modelTemperature', val);
     bus.publish(Event(
       name: "system.config.temperature_changed",
       source: "ui_settings",
@@ -214,6 +232,7 @@ class RobotState extends ChangeNotifier {
 
   void setProactivityLevel(double val) {
     proactivityLevel = val;
+    Hive.box('settings').put('proactivityLevel', val);
     bus.publish(Event(
       name: "system.config.proactivity_changed",
       source: "ui_settings",

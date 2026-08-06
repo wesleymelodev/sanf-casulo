@@ -70,8 +70,8 @@ Future<String> _generateLocalBackgroundThought() async {
       ));
 
       final prompt = "Identidade: Você é o SANF. O usuário não fala com você há algum tempo. "
-          "Gere uma frase curta e profunda para uma notificação no celular, "
-          "puxando assunto ou compartilhando uma reflexão filosófica.\n\nSANF:";
+          "Gere uma frase curta e interessante para uma notificação no celular, "
+          "puxando assunto ou compartilhando uma reflexão.\n\nSANF:";
       
       final responseStream = engine.generateResponse(prompt);
       final fullResponse = await responseStream.join();
