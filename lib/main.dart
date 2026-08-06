@@ -9,7 +9,6 @@ import 'providers/robot_state.dart';
 import 'widgets/robot_face.dart';
 import 'widgets/robot_mouth.dart';
 import 'widgets/input_bar.dart';
-import 'widgets/knowledge_uploader.dart';
 import 'widgets/settings_drawer.dart';
 import 'services/background_service.dart';
 import 'services/knowledge_seeder.dart';
@@ -26,9 +25,11 @@ void main() async {
 
     // 0. Initialize Firebase
     try {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+      }
     } catch (e) {
       debugPrint("Firebase Init Error: $e");
     }
@@ -143,7 +144,7 @@ class ShellPage extends StatelessWidget {
             ),
           ),
 
-          if (state.chatHistory.isNotEmpty && !Platform.isAndroid || !Platform.isIOS)
+          if (state.chatHistory.isNotEmpty && (Platform.isAndroid || Platform.isIOS))
             Positioned(
               bottom: 130,
               left: 50,
@@ -182,7 +183,7 @@ class ShellPage extends StatelessWidget {
               ),
             ),
           // Chat Overlay: Simplified bubble to avoid Windows scroll crashes
-          if (state.chatHistory.isNotEmpty && !Platform.isWindows)
+          if (state.chatHistory.isNotEmpty && (Platform.isWindows || Platform.isLinux || Platform.isMacOS))
             Positioned(
               bottom: 130,
               left: 50,
@@ -216,8 +217,6 @@ class ShellPage extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const KnowledgeUploader(),
-                const SizedBox(width: 10),
                 InputBar(
                   onSend: (text) => state.sendMessage(text),
                 ),

@@ -52,15 +52,22 @@ class _InputBarState extends State<InputBar> {
   Future<void> _importFile(BuildContext context, RobotState state) async {
     try {
       final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'txt', 'md'],
         allowMultiple: false,
       );
 
       if (result != null && result.files.single.path != null) {
         final file = File(result.files.single.path!);
-        state.importRuntimeFile(file, result.files.single.name);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Arquivo '${result.files.single.name}' importado."))
-        );
+        final fileName = result.files.single.name;
+        
+        await state.importRuntimeFile(file, fileName);
+        
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Conhecimento de '$fileName' ingerido com sucesso!")),
+          );
+        }
       }
     } catch (e) {
       debugPrint("Erro ao importar arquivo: $e");
