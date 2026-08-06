@@ -40,6 +40,7 @@ class AudioSensor extends LifecycleComponent {
 
       if (_isInitialized) {
         _startPassiveListening();
+        _bus.subscribe("sensor.audio.toggle", (e) => _toggleManualListening());
       } else {
         debugPrint("AudioSensor failed to initialize.");
       }
@@ -48,28 +49,44 @@ class AudioSensor extends LifecycleComponent {
     }
   }
 
+  void _toggleManualListening() async {
+    if (_speechToText.isListening) {
+      _isListening = false;
+      await _speechToText.stop();
+    } else {
+      _startPassiveListening();
+    }
+  }
+
   void _startPassiveListening() async {
-    if (!_isInitialized) return;
+    if (!_isInitialized || _speechToText.isListening) return;
     _isListening = true;
     
     debugPrint("AudioSensor: Starting passive listen...");
-    await _speechToText.listen(
-      onResult: (result) {
-        if (result.finalResult) {
-          _publishAudioEvent(result.recognizedWords);
-        }
-      },
-      localeId: 'pt_BR',
-      listenMode: ListenMode.confirmation, 
-      cancelOnError: false,
-      partialResults: true, // Enable partial results for better re-triggering logic
-    );
+    try {
+      await _speechToText.listen(
+        onResult: (result) {
+          if (result.finalResult) {
+            _publishAudioEvent(result.recognizedWords);
+          }
+        },
+        localeId: 'pt_BR',
+        listenMode: ListenMode.confirmation, 
+        cancelOnError: false,
+        partialResults: true,
+      );
+    } catch (e) {
+      debugPrint("AudioSensor: Error during listen call: $e");
+      _isListening = false;
+    }
   }
 
   void _restartListening() {
-    // Small delay to prevent tight loops in case of constant errors
-    Future.delayed(const Duration(seconds: 1), () {
-      if (_isListening) {
+    if (!_isListening) return;
+    
+    // Delay maior para evitar loops frenéticos no Android
+    Future.delayed(const Duration(seconds: 2), () {
+      if (_isListening && !_speechToText.isListening) {
         _startPassiveListening();
       }
     });

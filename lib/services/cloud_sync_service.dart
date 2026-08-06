@@ -21,7 +21,9 @@ class CloudSyncService extends LifecycleComponent {
   StreamSubscription? _authSubscription;
   String? _userId;
   bool _bootReady = false;
-  bool _isAIBusy = false; // Flag para evitar conflito de rede
+  bool _isAIBusy = false;
+  bool _isSpeaking = false;
+  DateTime _lastActivity = DateTime.now(); // Rastreador de inércia
 
   // --- FILA DE SINCRONIZAÇÃO DE SAÍDA (DEBOUNCE) ---
   final Map<String, dynamic> _episodicQueue = {};
@@ -56,9 +58,24 @@ class CloudSyncService extends LifecycleComponent {
     _bus.subscribe("memory.episodic.stored", _onEpisodicStored);
     _bus.subscribe("memory.semantic.consolidated", _onSemanticConsolidated);
     
-    // Escuta o estado da IA para evitar "fogo cruzado" na rede do Windows
-    _bus.subscribe("cognition.thinking.start", (e) => _isAIBusy = true);
-    _bus.subscribe("cognition.thinking.stop", (e) => _isAIBusy = false);
+    // Escuta o estado da IA e da fala para atualizar a última atividade
+    _bus.subscribe("cognition.thinking.start", (e) {
+      _isAIBusy = true;
+      _lastActivity = DateTime.now();
+    });
+    _bus.subscribe("cognition.thinking.stop", (e) {
+      _isAIBusy = false;
+      _lastActivity = DateTime.now();
+    });
+    
+    _bus.subscribe("cognition.speaking.start", (e) {
+      _isSpeaking = true;
+      _lastActivity = DateTime.now();
+    });
+    _bus.subscribe("cognition.speaking.stop", (e) {
+      _isSpeaking = false;
+      _lastActivity = DateTime.now();
+    });
   }
 
   Future<void> _signInAnonymously() async {
@@ -101,10 +118,13 @@ class CloudSyncService extends LifecycleComponent {
   Future<void> _processQueues() async {
     if (_userId == null || !_bootReady) return;
 
-    // REGRA DE OURO: Se a IA estiver pensando ou o barramento estiver cheio, 
-    // adiamos a sincronização para evitar crash de sockets no Windows.
-    if (_isAIBusy || _bus.pendingCount > 0) {
-      debugPrint("CloudSync: Rede ocupada (IA pensando). Adiado em 10s...");
+    final now = DateTime.now();
+    final secondsSinceActivity = now.difference(_lastActivity).inSeconds;
+
+    // REGRA DE OURO REFORÇADA: O sistema precisa estar em repouso TOTAL 
+    // (sem IA, sem fala e sem eventos recentes) por pelo menos 3 segundos.
+    if (_isAIBusy || _isSpeaking || _bus.pendingCount > 0 || secondsSinceActivity < 3) {
+      debugPrint("CloudSync: Sistema ainda instável ou ocupado. Adiado em 10s...");
       _syncTimer?.cancel();
       _syncTimer = Timer(const Duration(seconds: 10), () => _processQueues());
       return;
@@ -141,9 +161,24 @@ class CloudSyncService extends LifecycleComponent {
         debugPrint("CloudSync: Batch preparado. Aguardando respiro de rede...");
         await Future.delayed(const Duration(seconds: 1));
         
-        debugPrint("CloudSync: Enviando batch atômico para o Firebase (${updates.length} itens)...");
-        await _db.ref("users/$_userId").update(updates).timeout(const Duration(seconds: 15));
-        debugPrint("CloudSync: Batch enviado com sucesso.");
+        debugPrint("CloudSync: Enviando dados para o Firebase (${updates.length} itens)...");
+
+        if (Platform.isWindows) {
+          // No Windows, enviamos um por um com pequeno intervalo para máxima estabilidade
+          for (var entry in updates.entries) {
+            try {
+              await _db.ref("users/$_userId/${entry.key}").set(entry.value).timeout(const Duration(seconds: 5));
+              await Future.delayed(const Duration(milliseconds: 200));
+            } catch (e) {
+              debugPrint("CloudSync Single Update Error: $e");
+            }
+          }
+        } else {
+          // No Android/iOS usamos o update atômico que é mais performático
+          await _db.ref("users/$_userId").update(updates).timeout(const Duration(seconds: 15));
+        }
+
+        debugPrint("CloudSync: Sincronização concluída.");
       }
     } catch (e) {
       debugPrint("CloudSync Batch Error: $e");

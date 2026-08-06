@@ -71,7 +71,6 @@ class RobotState extends ChangeNotifier {
   late final CloudSyncService cloudSync;
   
   final FlutterTts tts = FlutterTts();
-  final SpeechToText stt = SpeechToText();
   bool _speechEnabled = false;
 
   RobotState() {
@@ -304,6 +303,7 @@ class RobotState extends ChangeNotifier {
     
     addMessage("SANF", text);
     isSpeaking = true;
+    bus.publish(Event(name: "cognition.speaking.start", source: "robot_state"));
     notifyListeners();
 
     // Filtra asteriscos para o TTS não ler "asterisco" ou pausar estranhamente
@@ -341,6 +341,7 @@ class RobotState extends ChangeNotifier {
       int estimatedDuration = (cleanText.length * 75).clamp(2000, 15000);
       Timer(Duration(milliseconds: estimatedDuration), () {
         isSpeaking = false;
+        bus.publish(Event(name: "cognition.speaking.stop", source: "robot_state"));
         notifyListeners();
       });
     } catch (e) {
@@ -356,7 +357,7 @@ class RobotState extends ChangeNotifier {
     int scheduledCount = 0;
 
     for (var word in words) {
-      if (scheduledCount > 15) break; // Limite de 15 expressões por frase para evitar crash de Timers
+      if (!Platform.isWindows && scheduledCount > 15) break; // Limite de 15 expressões por frase para evitar crash de Timers
       
       final cleanWord = word.replaceAll(RegExp(r'[^\w\s]'), '');
       final expression = ExpressionMapper.getExpressionForWord(cleanWord);
@@ -442,24 +443,12 @@ class RobotState extends ChangeNotifier {
   }
 
   void toggleListening() async {
-    // Note: Manual listening toggled from UI. 
-    // In passive mode, the AudioSensor handles this. 
-    // This method is now a fallback or manual override.
-    if (isListening) {
-      await stt.stop();
-    } else {
-      _speechEnabled = await stt.initialize();
-      if (!_speechEnabled) return;
-
-      await stt.listen(
-        onResult: (result) {
-          if (result.finalResult) {
-            sendMessage(result.recognizedWords);
-          }
-        },
-        localeId: 'pt_BR',
-      );
-    }
+    // Comando para o sensor de áudio via barramento
+    bus.publish(Event(
+      name: "sensor.audio.toggle",
+      source: "input_bar",
+      priority: 0.5,
+    ));
   }
 
   @override

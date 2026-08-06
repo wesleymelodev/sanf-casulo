@@ -86,9 +86,11 @@ class SemanticMemory extends LifecycleComponent {
     if (totalKeys > 2000) {
       debugPrint("SemanticMemory: Base massiva detectada ($totalKeys itens). Carregando apenas o núcleo ativo.");
       // Pega as últimas 2000 chaves sem converter tudo para lista primeiro
-      for (int i = totalKeys - 1; i >= totalKeys - 2000; i--) {
-        final key = _box.keyAt(i);
-        _loadSingleConcept(key);
+      if (!Platform.isWindows) {
+        for (int i = totalKeys - 1; i >= totalKeys - 2000; i--) {
+          final key = _box.keyAt(i);
+          _loadSingleConcept(key);
+        }
       }
     } else {
       for (var key in _box.keys) {
