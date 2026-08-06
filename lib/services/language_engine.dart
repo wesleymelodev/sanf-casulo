@@ -63,7 +63,7 @@ class LanguageEngine {
         
         _processQuery(sourceEvent.data.toString());
       } 
-      // 2. Reage a sinais de visão (consolida na memória silenciosamente)
+      // 2. Reage a sinais de visão (consolida na memória e comenta se for relevante)
       else if (sourceEvent.name == "sensor.vision") {
         _bus.publish(Event(
           name: "cognition.learning.fact",
@@ -72,6 +72,11 @@ class LanguageEngine {
           confidence: 0.9,
           priority: 0.6
         ));
+
+        // Se for uma análise de alta prioridade (ex: importada pelo usuário), gera um comentário
+        if (sourceEvent.priority >= 0.8) {
+          _processQuery("Analise o que foi visto: ${sourceEvent.data}");
+        }
       }
       // 3. Reage a áudio ambiente
       else if (sourceEvent.name == "sensor.audio") {

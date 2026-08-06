@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_object_detection/google_mlkit_object_detection.dart';
@@ -28,6 +30,13 @@ class VisionSensor extends LifecycleComponent {
     debugPrint("VisionSensor inicializado (Modo Local/Privacidade).");
     _initDetector();
     _bus.subscribe("vision.trigger.manual", (e) => _captureAndAnalyze());
+    _bus.subscribe("vision.analyze_file", (e) {
+      if (e.data is File) {
+        analyzeImportedImage(e.data as File);
+      } else if (e.data is String) {
+        analyzeImportedImage(File(e.data as String));
+      }
+    });
   }
 
   Future<void> _initDetector() async {
@@ -104,6 +113,67 @@ class VisionSensor extends LifecycleComponent {
     }).join("\n");
 
     return "Análise Visual Local:\n$labels";
+  }
+
+  Future<void> analyzeImportedImage(File imageFile) async {
+    if (_isCapturing) return;
+    _isCapturing = true;
+    
+    _bus.publish(Event(name: "cognition.thinking.start", source: name));
+
+    try {
+      debugPrint("Vision: Analisando imagem importada com Gemini...");
+      final description = await _tryGeminiVision(imageFile);
+      
+      if (description != null) {
+        _publishVisionEvent("Visão Gemini (Imagem Importada):\n$description");
+      } else {
+        _publishVisionEvent("Falha ao analisar imagem importada.");
+      }
+    } catch (e) {
+      debugPrint("Erro na visão Gemini: $e");
+    } finally {
+      _isCapturing = false;
+      _bus.publish(Event(name: "cognition.thinking.stop", source: name));
+    }
+  }
+
+  Future<String?> _tryGeminiVision(File imageFile) async {
+    const String geminiKey = String.fromEnvironment('GEMINI_API_KEY');
+    if (geminiKey.isEmpty) return "Erro: GEMINI_API_KEY não configurada.";
+
+    final url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=$geminiKey";
+
+    try {
+      final bytes = await imageFile.readAsBytes();
+      final base64Image = base64Encode(bytes);
+
+      final response = await http.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          "contents": [{
+            "parts": [
+              {"text": "Descreva esta imagem de forma detalhada para um sistema cognitivo."},
+              {
+                "inline_data": {
+                  "mime_type": "image/jpeg",
+                  "data": base64Image
+                }
+              }
+            ]
+          }]
+        }),
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['candidates'][0]['content']['parts'][0]['text'];
+      }
+    } catch (e) {
+      debugPrint("Gemini Vision Exception: $e");
+    }
+    return null;
   }
 
   void _publishVisionEvent(String description) {
