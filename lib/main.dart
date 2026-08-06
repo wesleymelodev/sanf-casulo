@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -152,32 +153,49 @@ class ShellPage extends StatelessWidget {
               child: Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxHeight: 200, maxWidth: 600),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.7),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.cyanAccent.withOpacity(0.3)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.cyanAccent.withOpacity(0.1),
-                          blurRadius: 10,
-                          spreadRadius: 2,
-                        )
-                      ],
-                    ),
-                    child: SingleChildScrollView(
-                      reverse: true, // Auto-scroll to bottom
-                      child: Text(
-                        state.chatHistory.last['text'] ?? "",
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.cyanAccent,
-                          fontSize: 18,
-                          height: 1.4,
+                  child: Stack(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.7),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.cyanAccent.withOpacity(0.3)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.cyanAccent.withOpacity(0.1),
+                              blurRadius: 10,
+                              spreadRadius: 2,
+                            )
+                          ],
+                        ),
+                        child: SingleChildScrollView(
+                          reverse: true, // Auto-scroll to bottom
+                          child: Text(
+                            state.chatHistory.last['text'] ?? "",
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.cyanAccent,
+                              fontSize: 18,
+                              height: 1.4,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                      Positioned(
+                        top: 5,
+                        right: 5,
+                        child: IconButton(
+                          icon: const Icon(Icons.copy, size: 16, color: Colors.cyanAccent),
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: state.chatHistory.last['text'] ?? ""));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text("Resposta copiada!"), duration: Duration(seconds: 1)),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -189,22 +207,39 @@ class ShellPage extends StatelessWidget {
               left: 50,
               right: 50,
               child: Center(
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.cyanAccent.withOpacity(0.3)),
-                  ),
-                  child: Text(
-                    state.chatHistory.last['text'] ?? "",
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.cyanAccent,
-                      fontSize: 18,
-                      height: 1.4,
+                child: Stack(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.cyanAccent.withOpacity(0.3)),
+                      ),
+                      child: Text(
+                        state.chatHistory.last['text'] ?? "",
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.cyanAccent,
+                          fontSize: 18,
+                          height: 1.4,
+                        ),
+                      ),
                     ),
-                  ),
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: IconButton(
+                        icon: const Icon(Icons.copy, size: 16, color: Colors.cyanAccent),
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: state.chatHistory.last['text'] ?? ""));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text("Resposta copiada!"), duration: Duration(seconds: 1)),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -231,8 +266,8 @@ class ShellPage extends StatelessWidget {
   Widget _buildMetricsOverlay(RobotState state) {
     return Positioned(
       top: 40,
-      left: 10,
-      right: 10,
+      left: 20,
+      right: 70, // Espaço para o botão de configurações
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -257,7 +292,7 @@ class ShellPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                _metricBar("CARGA COGNITIVA", state.cognitiveLoad, Colors.orangeAccent),
+                _metricBar("CARGA COGNITIVA", state.cognitiveLoad, Colors.orangeAccent, isRightAligned: true),
                 const SizedBox(height: 10),
                 Text(
                   state.attentionFocus.toUpperCase(),
@@ -273,9 +308,9 @@ class ShellPage extends StatelessWidget {
     );
   }
 
-  Widget _metricBar(String label, double value, Color color) {
+  Widget _metricBar(String label, double value, Color color, {bool isRightAligned = false}) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: isRightAligned ? CrossAxisAlignment.end : CrossAxisAlignment.start,
       children: [
         Text(label, style: const TextStyle(fontSize: 8, color: Colors.white38)),
         const SizedBox(height: 4),
@@ -286,7 +321,7 @@ class ShellPage extends StatelessWidget {
               height: 4,
               decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(2)),
               child: FractionallySizedBox(
-                alignment: Alignment.centerLeft,
+                alignment: isRightAligned ? Alignment.centerRight : Alignment.centerLeft,
                 widthFactor: value.clamp(0.0, 1.0),
                 child: Container(decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
               ),

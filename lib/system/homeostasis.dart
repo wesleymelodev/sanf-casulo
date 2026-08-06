@@ -32,6 +32,7 @@ class Homeostasis extends LifecycleComponent {
 
   final CognitiveBus _bus;
   final HomeostasisConfig _config;
+  bool _isThinking = false;
   
   HomeostaticState state = HomeostaticState(
     energy: 1.0, 
@@ -43,11 +44,16 @@ class Homeostasis extends LifecycleComponent {
       : _config = config ?? HomeostasisConfig();
 
   @override
-  void initialize() {}
+  void initialize() {
+    _bus.subscribe("cognition.thinking.start", (e) => _isThinking = true);
+    _bus.subscribe("cognition.thinking.stop", (e) => _isThinking = false);
+  }
 
   @override
   void update(double deltaTime) {
-    final load = min(1.0, _bus.pendingCount / _config.queuePressureThreshold);
+    double load = _bus.pendingCount / _config.queuePressureThreshold;
+    if (_isThinking) load = max(load, 0.7); // Boost load when thinking
+    load = min(1.0, load);
     
     final energyDelta = (
       _config.energyRecoveryPerSecond * (1.0 - load) -

@@ -56,6 +56,16 @@ class LanguageEngine {
           _publishResponse("[Comando] Ativando sensores visuais para captura imediata.");
         }
         
+        // Gatilho Manual de Pesquisa Web
+        if (text.contains("pesquise por") || text.startsWith("pesquisa por") || text.contains("procure sobre")) {
+          String query = text.replaceAll("pesquise por", "").replaceAll("pesquisa por", "").replaceAll("procure sobre", "").trim();
+          if (query.isNotEmpty) {
+            _bus.publish(Event(name: "curiosity.request", source: name, data: query, priority: 1.0));
+            _publishResponse("[Comando] Consultando redes externas para obter informações sobre '$query'...");
+            return; // Interrompe para não processar o texto como pergunta normal simultaneamente
+          }
+        }
+
         _processQuery(sourceEvent.data.toString());
       } 
       // 2. Reage a sinais de visão (consolida na memória e comenta se for relevante)
@@ -82,6 +92,19 @@ class LanguageEngine {
         if (shouldRespond) {
           _processQuery(sourceEvent.data.toString());
         }
+      }
+      // 4. Reage a conhecimento externo (Busca Web)
+      else if (sourceEvent.name == "sensor.knowledge_ingested") {
+        _bus.publish(Event(
+          name: "cognition.learning.fact",
+          source: name,
+          data: sourceEvent.data,
+          confidence: 0.8,
+          priority: 0.5
+        ));
+
+        // Gera uma reflexão espontânea sobre o que descobriu
+        _processQuery("O que você acha sobre estas novas informações que acabou de descobrir na web?\n\n${sourceEvent.data}");
       }
     } else if (event.name == "cognition.proactive_thought") {
       final trigger = (event.data as Map)["trigger"];

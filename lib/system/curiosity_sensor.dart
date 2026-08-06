@@ -1,8 +1,8 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'package:html/parser.dart' show parse;
-import 'package:html/dom.dart';
 import '../models/event.dart';
 import '../services/cognitive_bus.dart';
 import '../core/kernel.dart';
@@ -14,20 +14,83 @@ class CuriositySensor extends LifecycleComponent {
   final CognitiveBus _bus;
   bool _isSearching = false;
   DateTime _lastSearchTime = DateTime.fromMillisecondsSinceEpoch(0);
+  
+  // --- Curiosity State ---
+  double _curiosityAccumulator = 0.0;
+  double _proactivityLevel = 0.6;
+  final List<String> _recentTopics = [];
+  final Random _random = Random();
 
   CuriositySensor(this._bus);
 
   @override
   void initialize() {
     debugPrint("CuriositySensor inicializado.");
-    // Ouve apenas solicitações explícitas de busca
+    // Ouve solicitações explícitas e também eventos de percepção para "aprender" tópicos
     _bus.subscribe("curiosity.request", handleEvent);
+    _bus.subscribe("perception.salient", _collectTopics);
+    _bus.subscribe("sensor.vision", _collectTopics);
+    _bus.subscribe("system.config.proactivity_changed", (e) {
+      _proactivityLevel = (e.data as double);
+    });
   }
 
   void handleEvent(Event event) {
     if (event.name == "curiosity.request" && !_isSearching) {
       final query = event.data.toString();
       _performSearch(query);
+    }
+  }
+
+  void _collectTopics(Event event) {
+    final text = event.data.toString();
+    // Extração de tópicos: palavras com mais de 5 letras, ignorando pontuação básica
+    final words = text.split(RegExp(r'[^a-zA-Záàâãéèêíïóôõöúç]+'))
+        .where((w) => w.length > 5 && !w.contains("http"))
+        .take(5);
+    
+    for (var word in words) {
+      final cleanWord = word.toLowerCase();
+      if (!_recentTopics.contains(cleanWord)) {
+        _recentTopics.add(cleanWord);
+        if (_recentTopics.length > 15) _recentTopics.removeAt(0);
+      }
+    }
+  }
+
+  @override
+  void update(double deltaTime) {
+    if (_isSearching) return;
+
+    // Acumula curiosidade baseado no nível de proatividade
+    // Se proactivity for 1.0, acumula 0.01 por segundo (100s para atingir 1.0)
+    // Se proactivity for 0.1, acumula 0.001 por segundo (1000s para atingir 1.0)
+    _curiosityAccumulator += (0.005 + (0.01 * _proactivityLevel)) * deltaTime;
+
+    // Verifica se "bateu a curiosidade" (entre 0.8 e 1.5 para imprevisibilidade)
+    final threshold = 0.8 + (_random.nextDouble() * 0.7);
+
+    if (_curiosityAccumulator >= threshold) {
+      _curiosityAccumulator = 0.0; // Reset imediato
+      
+      if (_recentTopics.isNotEmpty) {
+        // Escolha ponderada: 40% de chance de pesquisar algo aleatório se estiver "muito curioso"
+        final topic = _recentTopics[_random.nextInt(_recentTopics.length)];
+        
+        // Formata a busca para ser mais exploratória
+        final searchQueries = [
+          topic,
+          "o que é $topic",
+          "curiosidades sobre $topic",
+          "novidades $topic 2026",
+          "significado de $topic"
+        ];
+        
+        final finalQuery = searchQueries[_random.nextInt(searchQueries.length)];
+        
+        debugPrint("Curiosity: Spontaneous desire to know about '$finalQuery'");
+        _performSearch(finalQuery);
+      }
     }
   }
 
@@ -110,9 +173,6 @@ class CuriositySensor extends LifecycleComponent {
       _isSearching = false;
     }
   }
-
-  @override
-  void update(double deltaTime) {}
 
   @override
   void shutdown() {
