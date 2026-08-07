@@ -216,7 +216,7 @@ class LanguageEngine {
       ? [
           () => _tryGemini("gemini-3.6-flash", systemPrompt, query, _currentTemperature),
           () => _tryGroq("openai/gpt-oss-120b", systemPrompt, query, _currentTemperature),
-          () => _tryOllama("gemma3:1b", systemPrompt, query, _currentTemperature),
+          () => _tryOllama("gemma4:e2b", systemPrompt, query, _currentTemperature),
         ]
       : [ // Estratégia para Android/iOS: API primeiro para velocidade, Local (Termux) por último
           () => _tryGemini("gemini-3.6-flash", systemPrompt, query, _currentTemperature),
