@@ -15,6 +15,7 @@ class ProactivityEngine extends LifecycleComponent {
 
   DateTime _lastInteraction = DateTime.now();
   String _lastVisionDesc = "";
+  bool _isRobotSpeaking = false;
   
   // Limiar de tédio dinâmico (entre 2 a 10 minutos baseado no nível e random)
   double _currentIdleThreshold = 0.0;
@@ -30,6 +31,10 @@ class ProactivityEngine extends LifecycleComponent {
     _bus.subscribe("cognition.response", handleEvent);
     _bus.subscribe("sensor.vision", handleEvent);
     _bus.subscribe("sensor.audio", handleEvent);
+    
+    // Trava de segurança para não interromper a fala
+    _bus.subscribe("cognition.speaking.start", (e) => _isRobotSpeaking = true);
+    _bus.subscribe("cognition.speaking.stop", (e) => _isRobotSpeaking = false);
     
     // Escuta mudanças dinâmicas no nível de proatividade
     _bus.subscribe("system.config.proactivity_changed", (e) {
@@ -50,6 +55,11 @@ class ProactivityEngine extends LifecycleComponent {
 
   @override
   void update(double deltaTime) {
+    if (_isRobotSpeaking) {
+      _lastInteraction = DateTime.now(); // Reseta o cronômetro enquanto fala
+      return;
+    }
+
     final now = DateTime.now();
     final idleTime = now.difference(_lastInteraction).inSeconds;
 
@@ -106,5 +116,7 @@ class ProactivityEngine extends LifecycleComponent {
     _bus.unsubscribe("cognition.response", handleEvent);
     _bus.unsubscribe("sensor.vision", handleEvent);
     _bus.unsubscribe("sensor.audio", handleEvent);
+    _bus.unsubscribe("cognition.speaking.start", (e) {});
+    _bus.unsubscribe("cognition.speaking.stop", (e) {});
   }
 }

@@ -14,6 +14,7 @@ class AudioSensor extends LifecycleComponent {
   final SpeechToText _speechToText = SpeechToText();
   bool _isInitialized = false;
   bool _isListening = false;
+  bool _isManualRequest = false;
 
   AudioSensor(this._bus);
 
@@ -27,6 +28,12 @@ class AudioSensor extends LifecycleComponent {
       _isInitialized = await _speechToText.initialize(
         onStatus: (status) {
           debugPrint("AudioSensor Status: $status");
+          _bus.publish(Event(
+            name: "sensor.audio.status",
+            source: name,
+            data: status,
+            priority: 0.1,
+          ));
           if (status == 'notListening' && _isListening) {
             _restartListening();
           }
@@ -52,8 +59,10 @@ class AudioSensor extends LifecycleComponent {
   void _toggleManualListening() async {
     if (_speechToText.isListening) {
       _isListening = false;
+      _isManualRequest = false;
       await _speechToText.stop();
     } else {
+      _isManualRequest = true;
       _startPassiveListening();
     }
   }
@@ -95,14 +104,26 @@ class AudioSensor extends LifecycleComponent {
   void _publishAudioEvent(String text) {
     if (text.isEmpty) return;
 
-    _bus.publish(Event(
-      name: "sensor.audio",
-      source: name,
-      data: text,
-      priority: 0.5,
-      confidence: 0.8,
-      novelty: 0.7,
-    ));
+    if (_isManualRequest) {
+      _bus.publish(Event(
+        name: "user.input",
+        source: "input_bar",
+        data: text,
+        priority: 0.9,
+        confidence: 0.9,
+        metadata: {"from_audio": true},
+      ));
+      _isManualRequest = false;
+    } else {
+      _bus.publish(Event(
+        name: "sensor.audio",
+        source: name,
+        data: text,
+        priority: 0.5,
+        confidence: 0.8,
+        novelty: 0.7,
+      ));
+    }
     print("OUVIDO: $text");
   }
 

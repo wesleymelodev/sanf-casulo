@@ -45,6 +45,7 @@ class RobotState extends ChangeNotifier {
   List<Map<String, String>> chatHistory = [];
   double modelTemperature = 1.0;
   double proactivityLevel = 0.6; // 0.0 a 1.0
+  String userName = "Viajante";
 
   // --- Internal Cognitive Core ---
   late final Kernel kernel;
@@ -85,6 +86,7 @@ class RobotState extends ChangeNotifier {
     final settingsBox = await Hive.openBox('settings');
     modelTemperature = settingsBox.get('modelTemperature', defaultValue: 1.0);
     proactivityLevel = settingsBox.get('proactivityLevel', defaultValue: 0.6);
+    userName = settingsBox.get('userName', defaultValue: "Viajante");
 
     // Request permissions for Android
     if (Platform.isAndroid) {
@@ -200,6 +202,19 @@ class RobotState extends ChangeNotifier {
     bus.subscribe("system.homeostasis.changed", _onHomeostasisChanged);
     bus.subscribe("ui.expression.changed", _onExpressionChanged);
     
+    bus.subscribe("user.input", (e) {
+      if (e.metadata["from_audio"] == true) {
+        addMessage("Você", e.data.toString());
+      }
+    });
+    
+    bus.subscribe("sensor.audio.status", (e) {
+      scheduleMicrotask(() {
+        isListening = e.data == 'listening';
+        notifyListeners();
+      });
+    });
+
     bus.subscribe("workspace.updated", (e) => languageEngine.handleEvent(e));
     bus.subscribe("cognition.proactive_thought", (e) => languageEngine.handleEvent(e));
 
@@ -214,6 +229,12 @@ class RobotState extends ChangeNotifier {
       name: "system.config.proactivity_changed",
       source: "kernel_boot",
       data: proactivityLevel,
+      priority: 0.0,
+    ));
+    bus.publish(Event(
+      name: "system.config.username_changed",
+      source: "kernel_boot",
+      data: userName,
       priority: 0.0,
     ));
   }
@@ -237,6 +258,18 @@ class RobotState extends ChangeNotifier {
       name: "system.config.proactivity_changed",
       source: "ui_settings",
       data: val,
+      priority: 0.1,
+    ));
+    notifyListeners();
+  }
+
+  void setUserName(String name) {
+    userName = name;
+    Hive.box('settings').put('userName', name);
+    bus.publish(Event(
+      name: "system.config.username_changed",
+      source: "ui_settings",
+      data: name,
       priority: 0.1,
     ));
     notifyListeners();

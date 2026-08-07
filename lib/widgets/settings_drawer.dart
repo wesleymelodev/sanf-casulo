@@ -96,6 +96,44 @@ class SettingsDrawer extends StatelessWidget {
                     "Aumente para que o SANF puxe assunto com mais frequência. No máximo, ele tentará falar a cada 1 minuto de tédio.",
                     style: TextStyle(color: Colors.white38, fontSize: 11),
                   ),
+
+                  const SizedBox(height: 30),
+
+                  // --- NOME DO USUÁRIO ---
+                  const Text(
+                    "Nome do Usuário",
+                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    decoration: InputDecoration(
+                      hintText: "Como devo te chamar?",
+                      hintStyle: const TextStyle(color: Colors.white24),
+                      filled: true,
+                      fillColor: Colors.white.withOpacity(0.05),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: Colors.cyanAccent.withOpacity(0.3)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: Colors.cyanAccent.withOpacity(0.1)),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                    ),
+                    style: const TextStyle(color: Colors.cyanAccent),
+                    onSubmitted: (val) {
+                      if (val.trim().isNotEmpty) {
+                        state.setUserName(val.trim());
+                      }
+                    },
+                    controller: TextEditingController(text: state.userName),
+                  ),
+                  const SizedBox(height: 5),
+                  const Text(
+                    "Isso ajuda o SANF a manter a conexão pessoal com você entre as sessões.",
+                    style: TextStyle(color: Colors.white38, fontSize: 11),
+                  ),
                 ],
               ),
             ),
