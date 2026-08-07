@@ -235,7 +235,7 @@ class RobotState extends ChangeNotifier {
       name: "system.config.username_changed",
       source: "kernel_boot",
       data: userName,
-      priority: 0.0,
+      priority: 1.0, // Alta prioridade para garantir processamento imediato
     ));
   }
 
