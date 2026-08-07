@@ -25,7 +25,10 @@ class LanguageEngine {
   final String cfAccount = const String.fromEnvironment('CLOUDFLARE_ACCOUNT_ID');
   final String ollamaHost = const String.fromEnvironment('OLLAMA_HOST', defaultValue: "http://127.0.0.1:11434");
 
-  LanguageEngine(this._bus, {SemanticMemory? semanticMemory}) : _semanticMemory = semanticMemory {
+  LanguageEngine(this._bus, {SemanticMemory? semanticMemory, double initialTemp = 1.0, String initialUser = "Viajante"}) 
+      : _semanticMemory = semanticMemory,
+        _currentTemperature = initialTemp,
+        _userName = initialUser {
     _bus.subscribe("cognition.speaking.start", (e) => _isRobotSpeaking = true);
     _bus.subscribe("cognition.speaking.stop", (e) => _isRobotSpeaking = false);
   }

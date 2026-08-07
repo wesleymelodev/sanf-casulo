@@ -112,7 +112,12 @@ class RobotState extends ChangeNotifier {
     attention = AttentionController(bus);
     associativeEngine = AssociativeEngine(bus);
     reasoning = ReasoningEngine(bus);
-    languageEngine = LanguageEngine(bus, semanticMemory: semanticMemory);
+    languageEngine = LanguageEngine(
+      bus, 
+      semanticMemory: semanticMemory,
+      initialTemp: modelTemperature,
+      initialUser: userName,
+    );
     proactivityEngine = ProactivityEngine(bus, proactivityLevel: proactivityLevel);
     responseGenerator = ResponseGenerator(bus);
 
@@ -201,6 +206,10 @@ class RobotState extends ChangeNotifier {
     bus.subscribe("attention.focus.changed", _onAttentionFocusChanged);
     bus.subscribe("system.homeostasis.changed", _onHomeostasisChanged);
     bus.subscribe("ui.expression.changed", _onExpressionChanged);
+    
+    // Inscrições de Configuração para o Motor de Linguagem
+    bus.subscribe("system.config.*", (e) => languageEngine.handleEvent(e));
+    bus.subscribe("cognition.context_shift", (e) => languageEngine.handleEvent(e));
     
     bus.subscribe("user.input", (e) {
       if (e.metadata["from_audio"] == true) {

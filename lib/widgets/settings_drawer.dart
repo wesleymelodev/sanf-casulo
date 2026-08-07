@@ -123,8 +123,9 @@ class SettingsDrawer extends StatelessWidget {
                     ),
                     style: const TextStyle(color: Colors.cyanAccent),
                     onSubmitted: (val) {
-                      if (val.trim().isNotEmpty) {
-                        state.setUserName(val.trim());
+                      final cleanName = val.trim();
+                      if (cleanName.isNotEmpty) {
+                        state.setUserName(cleanName);
                       }
                     },
                     controller: TextEditingController(text: state.userName),
