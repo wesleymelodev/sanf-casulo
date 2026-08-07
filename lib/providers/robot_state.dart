@@ -46,6 +46,7 @@ class RobotState extends ChangeNotifier {
   double modelTemperature = 1.0;
   double proactivityLevel = 0.6; // 0.0 a 1.0
   String userName = "Viajante";
+  String ghostName = "SANF (Spectrum Ancrolyn Nexus Fractal)";
 
   // --- Internal Cognitive Core ---
   late final Kernel kernel;
@@ -87,6 +88,7 @@ class RobotState extends ChangeNotifier {
     modelTemperature = settingsBox.get('modelTemperature', defaultValue: 1.0);
     proactivityLevel = settingsBox.get('proactivityLevel', defaultValue: 0.6);
     userName = settingsBox.get('userName', defaultValue: "Viajante");
+    ghostName = settingsBox.get('ghostName', defaultValue: "SANF (Spectrum Ancrolyn Nexus Fractal)");
 
     // Request permissions for Android
     if (Platform.isAndroid) {
@@ -117,6 +119,7 @@ class RobotState extends ChangeNotifier {
       semanticMemory: semanticMemory,
       initialTemp: modelTemperature,
       initialUser: userName,
+      initialGhost: ghostName,
     );
     proactivityEngine = ProactivityEngine(bus, proactivityLevel: proactivityLevel);
     responseGenerator = ResponseGenerator(bus);
@@ -246,6 +249,12 @@ class RobotState extends ChangeNotifier {
       data: userName,
       priority: 1.0, // Alta prioridade para garantir processamento imediato
     ));
+    bus.publish(Event(
+      name: "system.config.ghostname_changed",
+      source: "kernel_boot",
+      data: ghostName,
+      priority: 1.0,
+    ));
   }
 
   void setModelTemperature(double val) {
@@ -277,6 +286,18 @@ class RobotState extends ChangeNotifier {
     Hive.box('settings').put('userName', name);
     bus.publish(Event(
       name: "system.config.username_changed",
+      source: "ui_settings",
+      data: name,
+      priority: 0.1,
+    ));
+    notifyListeners();
+  }
+
+  void setGhostName(String name) {
+    ghostName = name;
+    Hive.box('settings').put('ghostName', name);
+    bus.publish(Event(
+      name: "system.config.ghostname_changed",
       source: "ui_settings",
       data: name,
       priority: 0.1,

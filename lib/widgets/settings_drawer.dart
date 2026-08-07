@@ -135,6 +135,40 @@ class SettingsDrawer extends StatelessWidget {
                     "Isso ajuda o SANF a manter a conexão pessoal com você entre as sessões.",
                     style: TextStyle(color: Colors.white38, fontSize: 11),
                   ),
+
+                  const SizedBox(height: 30),
+
+                  // --- NOME DO FANTASMA (BOT) ---
+                  const Text(
+                    "Identidade do Sistema",
+                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    decoration: InputDecoration(
+                      hintText: "Nome do Ghost",
+                      filled: true,
+                      fillColor: Colors.white.withOpacity(0.05),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: Colors.cyanAccent.withOpacity(0.3)),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                    ),
+                    style: const TextStyle(color: Colors.yellowAccent),
+                    onSubmitted: (val) {
+                      final cleanName = val.trim();
+                      if (cleanName.isNotEmpty) {
+                        state.setGhostName(cleanName);
+                      }
+                    },
+                    controller: TextEditingController(text: state.ghostName),
+                  ),
+                  const SizedBox(height: 5),
+                  const Text(
+                    "Como a entidade deve se reconhecer (ex: SANF, Nexus, etc).",
+                    style: TextStyle(color: Colors.white38, fontSize: 11),
+                  ),
                 ],
               ),
             ),
