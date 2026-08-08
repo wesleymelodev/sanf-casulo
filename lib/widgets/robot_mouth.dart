@@ -5,7 +5,14 @@ import '../models/bot_expression.dart';
 class RobotMouth extends StatefulWidget {
   final bool isSpeaking;
   final BotExpression expression;
-  const RobotMouth({super.key, this.isSpeaking = false, this.expression = BotExpression.idle});
+  final Color mouthColor;
+
+  const RobotMouth({
+    super.key, 
+    this.isSpeaking = false, 
+    this.expression = BotExpression.idle,
+    this.mouthColor = Colors.yellowAccent,
+  });
 
   @override
   State<RobotMouth> createState() => _RobotMouthState();
@@ -86,11 +93,11 @@ class _RobotMouthState extends State<RobotMouth> with SingleTickerProviderStateM
               width: 8,
               height: 40 * _barHeights[index],
               decoration: BoxDecoration(
-                color: curvatureFactor < 0 ? Colors.orangeAccent : Colors.yellowAccent,
+                color: curvatureFactor < 0 ? Colors.orangeAccent : widget.mouthColor,
                 borderRadius: BorderRadius.circular(4),
                 boxShadow: [
                   BoxShadow(
-                    color: curvatureFactor < 0 ? Colors.deepOrange : Colors.yellow.withOpacity(0.5),
+                    color: curvatureFactor < 0 ? Colors.deepOrange : widget.mouthColor.withOpacity(0.5),
                     blurRadius: 5,
                     spreadRadius: 1,
                   )

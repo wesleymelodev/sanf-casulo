@@ -18,6 +18,7 @@ class VisionSensor extends LifecycleComponent {
   final CognitiveBus _bus;
   bool _isCapturing = false;
   ObjectDetector? _objectDetector;
+  String _dynamicGeminiKey = "";
 
   VisionSensor(this._bus);
 
@@ -36,6 +37,10 @@ class VisionSensor extends LifecycleComponent {
       } else if (e.data is String) {
         analyzeImportedImage(File(e.data as String));
       }
+    });
+    _bus.subscribe("system.config.keys_changed", (e) {
+      final keys = e.data as Map<String, dynamic>;
+      if (keys.containsKey("gemini")) _dynamicGeminiKey = keys["gemini"];
     });
   }
 
@@ -139,10 +144,12 @@ class VisionSensor extends LifecycleComponent {
   }
 
   Future<String?> _tryGeminiVision(File imageFile) async {
-    const String geminiKey = String.fromEnvironment('GEMINI_API_KEY');
+    String geminiKey = const String.fromEnvironment('GEMINI_API_KEY');
+    if (_dynamicGeminiKey.isNotEmpty) geminiKey = _dynamicGeminiKey;
+
     if (geminiKey.isEmpty) return "Erro: GEMINI_API_KEY não configurada.";
 
-    final url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=$geminiKey";
+    final url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$geminiKey";
 
     try {
       final bytes = await imageFile.readAsBytes();

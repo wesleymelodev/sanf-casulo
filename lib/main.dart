@@ -86,27 +86,30 @@ class ShellPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<RobotState>();
+    final baseStyle = TextStyle(fontFamily: state.fontFamily == 'Default' ? null : state.fontFamily);
 
     return Scaffold(
+      backgroundColor: state.ambientColor,
       endDrawer: const SettingsDrawer(),
       body: Stack(
         children: [
           // Background Glow
-          Center(
-            child: Container(
-              width: 500,
-              height: 500,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    Colors.cyan.withOpacity(0.05),
-                    Colors.transparent,
-                  ],
+          if (state.ambientColor == const Color(0xFF00050A))
+            Center(
+              child: Container(
+                width: 500,
+                height: 500,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      Colors.cyan.withOpacity(0.05),
+                      Colors.transparent,
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
           
           // Main Face Components: Floating in the center, slightly elevated
           Align(
@@ -117,6 +120,7 @@ class ShellPage extends StatelessWidget {
                 RobotFace(
                   expression: state.expression,
                   energy: state.energy,
+                  eyeColor: state.eyeColor,
                 ),
                 const SizedBox(height: 20),
                 if (state.isThinking)
@@ -125,6 +129,7 @@ class ShellPage extends StatelessWidget {
                   RobotMouth(
                     isSpeaking: state.isSpeaking,
                     expression: state.expression,
+                    mouthColor: state.mouthColor,
                   ),
               ],
             ),
@@ -174,8 +179,8 @@ class ShellPage extends StatelessWidget {
                           child: Text(
                             state.chatHistory.last['text'] ?? "",
                             textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Colors.cyanAccent,
+                            style: baseStyle.copyWith(
+                              color: state.textBodyColor,
                               fontSize: 18,
                               height: 1.4,
                             ),
@@ -219,8 +224,8 @@ class ShellPage extends StatelessWidget {
                       child: Text(
                         state.chatHistory.last['text'] ?? "",
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.cyanAccent,
+                        style: baseStyle.copyWith(
+                          color: state.textBodyColor,
                           fontSize: 18,
                           height: 1.4,
                         ),

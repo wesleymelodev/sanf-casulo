@@ -48,6 +48,22 @@ class RobotState extends ChangeNotifier {
   String userName = "Viajante";
   String ghostName = "SANF (Spectrum Ancrolyn Nexus Fractal)";
 
+  // --- Dynamic UI States (Agentic Control) ---
+  Color ambientColor = const Color(0xFF00050A);
+  String appBarTitle = "SANF Interface";
+  String fontFamily = 'Default';
+  Color textBodyColor = Colors.cyanAccent;
+  Color senderNameColor = Colors.yellowAccent;
+  Color eyeColor = Colors.cyanAccent;
+  Color mouthColor = Colors.yellowAccent;
+
+  // --- Dynamic API Keys (Web/Custom) ---
+  String webGeminiKey = "";
+  String webGroqKey = "";
+  String webCfKey = "";
+  String webCfAccount = "";
+  Map<String, String> webFirebaseConfig = {};
+
   // --- Internal Cognitive Core ---
   late final Kernel kernel;
   late final CognitiveBus bus;
@@ -90,6 +106,12 @@ class RobotState extends ChangeNotifier {
     userName = settingsBox.get('userName', defaultValue: "Viajante");
     ghostName = settingsBox.get('ghostName', defaultValue: "SANF (Spectrum Ancrolyn Nexus Fractal)");
 
+    webGeminiKey = settingsBox.get('webGeminiKey', defaultValue: "");
+    webGroqKey = settingsBox.get('webGroqKey', defaultValue: "");
+    webCfKey = settingsBox.get('webCfKey', defaultValue: "");
+    webCfAccount = settingsBox.get('webCfAccount', defaultValue: "");
+    webFirebaseConfig = Map<String, String>.from(settingsBox.get('webFirebaseConfig', defaultValue: <String, String>{}));
+
     // Request permissions for Android
     if (Platform.isAndroid) {
       try {
@@ -120,6 +142,8 @@ class RobotState extends ChangeNotifier {
       initialTemp: modelTemperature,
       initialUser: userName,
       initialGhost: ghostName,
+      geminiKey: webGeminiKey,
+      groqKey: webGroqKey,
     );
     proactivityEngine = ProactivityEngine(bus, proactivityLevel: proactivityLevel);
     responseGenerator = ResponseGenerator(bus);
@@ -210,6 +234,9 @@ class RobotState extends ChangeNotifier {
     bus.subscribe("system.homeostasis.changed", _onHomeostasisChanged);
     bus.subscribe("ui.expression.changed", _onExpressionChanged);
     
+    // Inscrição para Comandos de UI (Agente)
+    bus.subscribe("ui.command.execute", _onUiCommandReceived);
+
     // Inscrições de Configuração para o Motor de Linguagem
     bus.subscribe("system.config.*", (e) => languageEngine.handleEvent(e));
     bus.subscribe("cognition.context_shift", (e) => languageEngine.handleEvent(e));
@@ -305,10 +332,95 @@ class RobotState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setWebGeminiKey(String key) {
+    webGeminiKey = key;
+    Hive.box('settings').put('webGeminiKey', key);
+    bus.publish(Event(name: "system.config.keys_changed", source: "ui_settings", data: {"gemini": key}));
+    notifyListeners();
+  }
+
+  void setWebGroqKey(String key) {
+    webGroqKey = key;
+    Hive.box('settings').put('webGroqKey', key);
+    bus.publish(Event(name: "system.config.keys_changed", source: "ui_settings", data: {"groq": key}));
+    notifyListeners();
+  }
+
+  void setWebFirebaseConfig(Map<String, String> config) {
+    webFirebaseConfig = config;
+    Hive.box('settings').put('webFirebaseConfig', config);
+    notifyListeners();
+  }
+
   void _onExpressionChanged(Event event) {
     if (event.data is BotExpression) {
       expression = event.data;
       notifyListeners();
+    }
+  }
+
+  void _onUiCommandReceived(Event event) {
+    final commands = event.data as Map<String, dynamic>;
+    
+    scheduleMicrotask(() {
+      // 1. Mudança de Cor de Fundo
+      if (commands['action'] == 'update_color' && commands['element'] == 'scaffoldBg') {
+        ambientColor = _parseColor(commands['value']);
+      }
+
+      // 2. Mudança de Título
+      if (commands['action'] == 'change_title') {
+        appBarTitle = commands['value'];
+      }
+
+      // 3. Mudança de Fonte
+      if (commands['action'] == 'update_font_family') {
+        fontFamily = commands['value'];
+      }
+
+      // 4. Cores de Texto Dinâmicas
+      if (commands.containsKey('text_body_color')) {
+        textBodyColor = _parseColor(commands['text_body_color']);
+      }
+      if (commands.containsKey('sender_name_color')) {
+        senderNameColor = _parseColor(commands['sender_name_color']);
+      }
+      if (commands.containsKey('eye_color')) {
+        eyeColor = _parseColor(commands['eye_color']);
+      }
+      if (commands.containsKey('mouth_color')) {
+        mouthColor = _parseColor(commands['mouth_color']);
+      }
+      
+      notifyListeners();
+    });
+  }
+
+  Color _parseColor(String value) {
+    if (value.startsWith('#')) {
+      try {
+        String hex = value.replaceFirst('#', '');
+        if (hex.length == 6) hex = 'FF$hex';
+        return Color(int.parse(hex, radix: 16));
+      } catch (e) {
+        return Colors.cyanAccent;
+      }
+    }
+    switch (value.toLowerCase()) {
+      case 'red': return const Color(0xFFFF0000);
+      case 'blue': return const Color(0xFF0000FF);
+      case 'green': return const Color(0xFF00FF00);
+      case 'yellow': return const Color(0xFFFFFF00);
+      case 'black': return const Color(0xFF000000);
+      case 'white': return const Color(0xFFFFFFFF);
+      case 'purple': return const Color(0xFFB700FF);
+      case 'orange': return const Color(0xFFFF8700);
+      case 'pink': return const Color(0xFFFF0080);
+      case 'brown': return const Color(0xFF8B4513);
+      case 'gray': return const Color(0xFF808080);
+      case 'grey': return const Color(0xFF808080);
+      case 'cyan': return Colors.cyanAccent;
+      default: return Colors.cyanAccent;
     }
   }
 

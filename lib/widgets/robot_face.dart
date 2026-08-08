@@ -5,11 +5,13 @@ import '../models/bot_expression.dart';
 class RobotFace extends StatelessWidget {
   final BotExpression expression;
   final double energy;
+  final Color eyeColor;
 
   const RobotFace({
     super.key,
     required this.expression,
     this.energy = 1.0,
+    this.eyeColor = Colors.cyanAccent,
   });
 
   @override
@@ -28,6 +30,7 @@ class RobotFace extends StatelessWidget {
         painter: ExpressionPainter(
           expression: expression,
           energy: energy,
+          eyeColor: eyeColor,
         ),
       ),
     );
@@ -37,8 +40,9 @@ class RobotFace extends StatelessWidget {
 class ExpressionPainter extends CustomPainter {
   final BotExpression expression;
   final double energy;
+  final Color eyeColor;
 
-  ExpressionPainter({required this.expression, required this.energy});
+  ExpressionPainter({required this.expression, required this.energy, required this.eyeColor});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -46,12 +50,12 @@ class ExpressionPainter extends CustomPainter {
     final Offset leftEyeCenter = Offset(size.width / 2 - spacing / 2, size.height / 2);
     final Offset rightEyeCenter = Offset(size.width / 2 + spacing / 2, size.height / 2);
 
-    final cyanPaint = Paint()
-      ..color = Colors.cyanAccent.withOpacity(0.8)
+    final eyePaint = Paint()
+      ..color = eyeColor.withOpacity(0.8)
       ..style = PaintingStyle.fill;
     
     final glowPaint = Paint()
-      ..color = Colors.cyan.withOpacity(0.3 * energy)
+      ..color = eyeColor.withOpacity(0.3 * energy)
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, 12 * energy);
 
     switch (expression) {
@@ -60,97 +64,97 @@ class ExpressionPainter extends CustomPainter {
         _drawHeart(canvas, rightEyeCenter, Colors.redAccent, hasPinkGlow: true);
         break;
       case BotExpression.excited:
-        _drawStar(canvas, leftEyeCenter, Colors.cyanAccent);
-        _drawStar(canvas, rightEyeCenter, Colors.cyanAccent);
+        _drawStar(canvas, leftEyeCenter, eyeColor);
+        _drawStar(canvas, rightEyeCenter, eyeColor);
         break;
       case BotExpression.neutralClosed:
-        _drawRect(canvas, leftEyeCenter, 60, 15, cyanPaint, glowPaint);
-        _drawRect(canvas, rightEyeCenter, 60, 15, cyanPaint, glowPaint);
+        _drawRect(canvas, leftEyeCenter, 60, 15, eyePaint, glowPaint);
+        _drawRect(canvas, rightEyeCenter, 60, 15, eyePaint, glowPaint);
         break;
       case BotExpression.dizzy:
-        _drawCircle(canvas, leftEyeCenter, 25, cyanPaint, glowPaint, hasShock: true);
-        _drawCircle(canvas, rightEyeCenter, 25, cyanPaint, glowPaint);
+        _drawCircle(canvas, leftEyeCenter, 25, eyePaint, glowPaint, hasShock: true);
+        _drawCircle(canvas, rightEyeCenter, 25, eyePaint, glowPaint);
         break;
       case BotExpression.greedy:
         _drawYen(canvas, leftEyeCenter);
         _drawYen(canvas, rightEyeCenter);
         break;
       case BotExpression.sleeping:
-        _drawArc(canvas, leftEyeCenter, 50, 30, false, cyanPaint, glowPaint, hasBubbles: true);
-        _drawArc(canvas, rightEyeCenter, 50, 30, false, cyanPaint, glowPaint);
+        _drawArc(canvas, leftEyeCenter, 50, 30, false, eyePaint, glowPaint, hasBubbles: true);
+        _drawArc(canvas, rightEyeCenter, 50, 30, false, eyePaint, glowPaint);
         break;
       case BotExpression.puzzledLeft:
-        _drawRect(canvas, leftEyeCenter, 60, 15, cyanPaint, glowPaint);
-        _drawRect(canvas, rightEyeCenter, 60, 15, cyanPaint, glowPaint, hasQuestionMark: true);
+        _drawRect(canvas, leftEyeCenter, 60, 15, eyePaint, glowPaint);
+        _drawRect(canvas, rightEyeCenter, 60, 15, eyePaint, glowPaint, hasQuestionMark: true);
         break;
       case BotExpression.sad:
-        _drawSlantedRect(canvas, leftEyeCenter, 20, 50, -0.2, cyanPaint, glowPaint);
-        _drawSlantedRect(canvas, rightEyeCenter, 20, 50, 0.2, cyanPaint, glowPaint);
+        _drawSlantedRect(canvas, leftEyeCenter, 20, 50, -0.2, eyePaint, glowPaint);
+        _drawSlantedRect(canvas, rightEyeCenter, 20, 50, 0.2, eyePaint, glowPaint);
         break;
       case BotExpression.happy:
-        _drawArc(canvas, leftEyeCenter, 50, 40, true, cyanPaint, glowPaint);
-        _drawArc(canvas, rightEyeCenter, 50, 40, true, cyanPaint, glowPaint);
+        _drawArc(canvas, leftEyeCenter, 50, 40, true, eyePaint, glowPaint);
+        _drawArc(canvas, rightEyeCenter, 50, 40, true, eyePaint, glowPaint);
         break;
       case BotExpression.suspicious:
-        _drawRect(canvas, leftEyeCenter, 60, 10, cyanPaint, glowPaint);
-        _drawRect(canvas, rightEyeCenter, 60, 10, cyanPaint, glowPaint);
+        _drawRect(canvas, leftEyeCenter, 60, 10, eyePaint, glowPaint);
+        _drawRect(canvas, rightEyeCenter, 60, 10, eyePaint, glowPaint);
         break;
       case BotExpression.winking:
-        _drawRect(canvas, leftEyeCenter, 15, 40, cyanPaint, glowPaint);
+        _drawRect(canvas, leftEyeCenter, 15, 40, eyePaint, glowPaint);
         _drawChevron(canvas, rightEyeCenter, 40, true);
         break;
       case BotExpression.hypnotized:
-        _drawSpiral(canvas, leftEyeCenter, 30, cyanPaint);
-        _drawSpiral(canvas, rightEyeCenter, 30, cyanPaint);
+        _drawSpiral(canvas, leftEyeCenter, 30, eyePaint);
+        _drawSpiral(canvas, rightEyeCenter, 30, eyePaint);
         break;
       case BotExpression.frustrated:
         _drawChevron(canvas, leftEyeCenter, 40, false);
         _drawChevron(canvas, rightEyeCenter, 40, true);
         break;
       case BotExpression.crying:
-        _drawCrying(canvas, leftEyeCenter, cyanPaint, glowPaint);
-        _drawCrying(canvas, rightEyeCenter, cyanPaint, glowPaint);
+        _drawCrying(canvas, leftEyeCenter, eyePaint, glowPaint);
+        _drawCrying(canvas, rightEyeCenter, eyePaint, glowPaint);
         break;
       case BotExpression.sweating:
-        _drawRect(canvas, leftEyeCenter, 60, 15, cyanPaint, glowPaint, hasSweat: true);
-        _drawRect(canvas, rightEyeCenter, 60, 15, cyanPaint, glowPaint);
+        _drawRect(canvas, leftEyeCenter, 60, 15, eyePaint, glowPaint, hasSweat: true);
+        _drawRect(canvas, rightEyeCenter, 60, 15, eyePaint, glowPaint);
         break;
       case BotExpression.annoyed:
-        _drawRect(canvas, leftEyeCenter, 60, 25, cyanPaint, glowPaint);
-        _drawRect(canvas, rightEyeCenter, 60, 25, cyanPaint, glowPaint, hasStressBars: true);
+        _drawRect(canvas, leftEyeCenter, 60, 25, eyePaint, glowPaint);
+        _drawRect(canvas, rightEyeCenter, 60, 25, eyePaint, glowPaint, hasStressBars: true);
         break;
       case BotExpression.angry:
-        _drawAngry(canvas, leftEyeCenter, 50, cyanPaint, glowPaint);
-        _drawAngry(canvas, rightEyeCenter, 50, cyanPaint, glowPaint);
+        _drawAngry(canvas, leftEyeCenter, 50, eyePaint, glowPaint);
+        _drawAngry(canvas, rightEyeCenter, 50, eyePaint, glowPaint);
         break;
       case BotExpression.blushing:
-        _drawArc(canvas, leftEyeCenter, 50, 30, true, cyanPaint, glowPaint, hasBlush: true);
-        _drawArc(canvas, rightEyeCenter, 50, 30, true, cyanPaint, glowPaint, hasBlush: true);
+        _drawArc(canvas, leftEyeCenter, 50, 30, true, eyePaint, glowPaint, hasBlush: true);
+        _drawArc(canvas, rightEyeCenter, 50, 30, true, eyePaint, glowPaint, hasBlush: true);
         break;
       case BotExpression.masked:
-        _drawRect(canvas, leftEyeCenter, 15, 50, cyanPaint, glowPaint);
-        _drawRect(canvas, rightEyeCenter, 15, 50, cyanPaint, glowPaint);
+        _drawRect(canvas, leftEyeCenter, 15, 50, eyePaint, glowPaint);
+        _drawRect(canvas, rightEyeCenter, 15, 50, eyePaint, glowPaint);
         break;
       case BotExpression.scanning:
-        _drawRect(canvas, leftEyeCenter, 20, 80, cyanPaint, glowPaint);
-        _drawRect(canvas, rightEyeCenter, 20, 80, cyanPaint, glowPaint);
+        _drawRect(canvas, leftEyeCenter, 20, 80, eyePaint, glowPaint);
+        _drawRect(canvas, rightEyeCenter, 20, 80, eyePaint, glowPaint);
         break;
       case BotExpression.pleased:
-        _drawArc(canvas, leftEyeCenter, 60, 35, true, cyanPaint, glowPaint);
-        _drawArc(canvas, rightEyeCenter, 60, 35, true, cyanPaint, glowPaint);
+        _drawArc(canvas, leftEyeCenter, 60, 35, true, eyePaint, glowPaint);
+        _drawArc(canvas, rightEyeCenter, 60, 35, true, eyePaint, glowPaint);
         break;
       case BotExpression.lookingDown:
-        _drawRect(canvas, leftEyeCenter.translate(0, 30), 25, 50, cyanPaint, glowPaint);
-        _drawRect(canvas, rightEyeCenter.translate(0, 30), 25, 50, cyanPaint, glowPaint);
+        _drawRect(canvas, leftEyeCenter.translate(0, 30), 25, 50, eyePaint, glowPaint);
+        _drawRect(canvas, rightEyeCenter.translate(0, 30), 25, 50, eyePaint, glowPaint);
         break;
       case BotExpression.lookingUp:
-        _drawRect(canvas, leftEyeCenter.translate(0, -30), 25, 50, cyanPaint, glowPaint);
-        _drawRect(canvas, rightEyeCenter.translate(0, -30), 25, 50, cyanPaint, glowPaint);
+        _drawRect(canvas, leftEyeCenter.translate(0, -30), 25, 50, eyePaint, glowPaint);
+        _drawRect(canvas, rightEyeCenter.translate(0, -30), 25, 50, eyePaint, glowPaint);
         break;
       case BotExpression.idle:
       default:
-        _drawRect(canvas, leftEyeCenter, 30, 60, cyanPaint, glowPaint);
-        _drawRect(canvas, rightEyeCenter, 30, 60, cyanPaint, glowPaint);
+        _drawRect(canvas, leftEyeCenter, 30, 60, eyePaint, glowPaint);
+        _drawRect(canvas, rightEyeCenter, 30, 60, eyePaint, glowPaint);
         break;
     }
   }
@@ -161,14 +165,14 @@ class ExpressionPainter extends CustomPainter {
     canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(8)), p);
     
     if (hasQuestionMark) {
-      _drawText(canvas, center.translate(0, -30), "?", 24, Colors.cyanAccent);
+      _drawText(canvas, center.translate(0, -30), "?", 24, eyeColor);
     }
     if (hasSweat) {
       _drawSweat(canvas, center.translate(w/2, h/2));
     }
     if (hasStressBars) {
       for (int i=0; i<3; i++) {
-        canvas.drawRect(Rect.fromLTWH(center.dx - 15 + i*15, center.dy - 30, 5, 10), Paint()..color = i == 1 ? Colors.red : Colors.cyanAccent);
+        canvas.drawRect(Rect.fromLTWH(center.dx - 15 + i*15, center.dy - 30, 5, 10), Paint()..color = i == 1 ? Colors.red : eyeColor);
       }
     }
   }
@@ -250,11 +254,11 @@ class ExpressionPainter extends CustomPainter {
       path.lineTo(center.dx + size/2, center.dy);
       path.lineTo(center.dx - size/2, center.dy + size/2);
     }
-    canvas.drawPath(path, Paint()..color = Colors.cyanAccent..style = PaintingStyle.stroke..strokeWidth = 8..strokeCap = StrokeCap.round);
+    canvas.drawPath(path, Paint()..color = eyeColor..style = PaintingStyle.stroke..strokeWidth = 8..strokeCap = StrokeCap.round);
   }
 
   void _drawYen(Canvas canvas, Offset center) {
-    _drawText(canvas, center, "¥", 40, Colors.cyanAccent);
+    _drawText(canvas, center, "¥", 40, eyeColor);
     _drawStar(canvas, center.translate(25, -15), Colors.yellowAccent, size: 8);
   }
 
