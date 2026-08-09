@@ -274,7 +274,7 @@ class LanguageEngine {
         debugPrint("Language Engine Attempt Failed: $e");
       }
     }
-    return "Sinto muito, meus sistemas de linguagem estão temporariamente offline.";
+    return "Sinto muito, meus sistemas de linguagem estão temporariamente offline. Você adicionou uma chave de API nas configurações?";
   }
 
   Future<String?> _tryGemini(String model, String system, String query, double temperature) async {
