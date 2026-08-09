@@ -19,6 +19,7 @@ class _InputBarState extends State<InputBar> {
 
   void _handleSend() {
     if (_controller.text.isNotEmpty) {
+      debugPrint("InputBar: Enviando mensagem: ${_controller.text}");
       widget.onSend(_controller.text);
       _controller.clear();
       setState(() => _isExpanded = false);

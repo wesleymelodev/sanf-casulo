@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 class KnowledgeSeeder {
   static Future<void> seedIfNecessary() async {
+    if (kIsWeb) return; // O Hive na Web usa IndexedDB e não suporta seeding via arquivo local assim
     try {
       // getApplicationDocumentsDirectory() é o padrão do Hive.initFlutter()
       final directory = await getApplicationDocumentsDirectory();

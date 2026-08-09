@@ -34,7 +34,7 @@ class Kernel {
         debugPrint("Kernel Component: Inicializando ${component.name}...");
         component.initialize();
         // Delay de segurança entre componentes para evitar pico de I/O no Windows
-        if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+        if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
           await Future.delayed(const Duration(milliseconds: 300));
         }
       } catch (e) {

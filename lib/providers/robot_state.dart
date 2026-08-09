@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:flutter_tts/flutter_tts.dart';
@@ -113,7 +114,7 @@ class RobotState extends ChangeNotifier {
     webFirebaseConfig = Map<String, String>.from(settingsBox.get('webFirebaseConfig', defaultValue: <String, String>{}));
 
     // Request permissions for Android
-    if (Platform.isAndroid) {
+    if (!kIsWeb && Platform.isAndroid) {
       try {
         await [
           Permission.microphone,
@@ -181,55 +182,14 @@ class RobotState extends ChangeNotifier {
     _register(visionSensor);
     _register(cloudSync);
 
-    try {
-      await tts.setLanguage("pt-BR");
-      _setMaleVoice();
-
-      // SINCRONIA DE EXPRESSÃO EM TEMPO REAL
-      // AVISO: O setProgressHandler causa crash de Threading no Windows
-      if (!Platform.isWindows) {
-        tts.setProgressHandler((String text, int start, int end, String word) {
-          final cleanWord = word.replaceAll(RegExp(r'[^\w\s]'), '');
-          final expression = ExpressionMapper.getExpressionForWord(cleanWord);
-          
-          if (expression != null) {
-            debugPrint("TTS Sync: Palavra '$cleanWord' disparou expressão $expression");
-            bus.publish(Event(
-              name: "ui.expression.changed",
-              source: "tts_sync",
-              data: expression,
-              priority: 0.2,
-            ));
-          }
-        });
-      } else {
-        debugPrint("TTS: Desativando ProgressHandler nativo no Windows para evitar crash.");
-      }
-    } catch (e) {
-      debugPrint("TTS Init Error: $e");
-    }
-
-    // DELAY DE ESTABILIZAÇÃO (Zen Delay)
-    // Dá tempo para o Windows carregar drivers e Firebase estabilizar
-    debugPrint("Kernel: Aguardando estabilização do sistema (3s)...");
-    await Future.delayed(const Duration(seconds: 3));
-
-    debugPrint("Kernel: Iniciando ciclo cognitivo.");
+    // INICIA O KERNEL IMEDIATAMENTE (Não espera por TTS ou Hive)
+    debugPrint("Kernel: Iniciando ciclo cognitivo...");
     kernel.run();
 
+    // Inscrições Globais
     bus.subscribe("cognition.response", _onCognitionResponse);
-    bus.subscribe("cognition.thinking.start", (e) {
-      scheduleMicrotask(() {
-        isThinking = true;
-        notifyListeners();
-      });
-    });
-    bus.subscribe("cognition.thinking.stop", (e) {
-      scheduleMicrotask(() {
-        isThinking = false;
-        notifyListeners();
-      });
-    });
+    bus.subscribe("cognition.thinking.start", (e) => scheduleMicrotask(() { isThinking = true; notifyListeners(); }));
+    bus.subscribe("cognition.thinking.stop", (e) => scheduleMicrotask(() { isThinking = false; notifyListeners(); }));
     bus.subscribe("attention.focus.changed", _onAttentionFocusChanged);
     bus.subscribe("system.homeostasis.changed", _onHomeostasisChanged);
     bus.subscribe("ui.expression.changed", _onExpressionChanged);
@@ -238,7 +198,10 @@ class RobotState extends ChangeNotifier {
     bus.subscribe("ui.command.execute", _onUiCommandReceived);
 
     // Inscrições de Configuração para o Motor de Linguagem
-    bus.subscribe("system.config.*", (e) => languageEngine.handleEvent(e));
+    bus.subscribe("system.config.keys_changed", (e) => languageEngine.handleEvent(e));
+    bus.subscribe("system.config.username_changed", (e) => languageEngine.handleEvent(e));
+    bus.subscribe("system.config.ghostname_changed", (e) => languageEngine.handleEvent(e));
+    bus.subscribe("system.config.temperature_changed", (e) => languageEngine.handleEvent(e));
     bus.subscribe("cognition.context_shift", (e) => languageEngine.handleEvent(e));
     
     bus.subscribe("user.input", (e) {
@@ -257,7 +220,19 @@ class RobotState extends ChangeNotifier {
     bus.subscribe("workspace.updated", (e) => languageEngine.handleEvent(e));
     bus.subscribe("cognition.proactive_thought", (e) => languageEngine.handleEvent(e));
 
-    // Publish initial persisted settings to all engines
+    // SETUP ASSÍNCRONO (Não bloqueia o Kernel)
+    _asyncSetup();
+  }
+
+  void _asyncSetup() async {
+    try {
+      await tts.setLanguage("pt-BR");
+      _setMaleVoice();
+    } catch (e) {
+      debugPrint("TTS Setup Error: $e");
+    }
+
+    // Publish initial persisted settings
     bus.publish(Event(
       name: "system.config.temperature_changed",
       source: "kernel_boot",
@@ -274,7 +249,7 @@ class RobotState extends ChangeNotifier {
       name: "system.config.username_changed",
       source: "kernel_boot",
       data: userName,
-      priority: 1.0, // Alta prioridade para garantir processamento imediato
+      priority: 1.0,
     ));
     bus.publish(Event(
       name: "system.config.ghostname_changed",
@@ -427,7 +402,11 @@ class RobotState extends ChangeNotifier {
   void _setMaleVoice() async {
     debugPrint("--- INICIANDO BUSCA DE VOZES (TARGET: NESO) ---");
     try {
-      List<dynamic> voices = await tts.getVoices;
+      // Timeout de segurança para evitar travamento no boot na Web/Windows
+      final List<dynamic> voices = await Future.any<dynamic>([
+        tts.getVoices,
+        Future.delayed(const Duration(seconds: 5), () => <dynamic>[]),
+      ]);
       
       if (voices.isEmpty) {
         debugPrint("AVISO: Lista de vozes vazia. Tentando novamente em 2s...");
@@ -509,23 +488,23 @@ class RobotState extends ChangeNotifier {
     // AGENDAMENTO DE EXPRESSÕES (Fallback para quando o handler nativo falha)
     // AVISO: No Windows, timers de sincronia durante o TTS podem causar instabilidade fatal
     try {
-      if (!Platform.isWindows) {
+      if (!kIsWeb && !Platform.isWindows) {
         _scheduleExpressions(cleanText);
       } else {
-        debugPrint("TTS Sync: Agendamento interno desativado no Windows para isolamento de crash.");
+        debugPrint("TTS Sync: Agendamento interno desativado ou rodando na Web/Windows.");
       }
     } catch (e) {
       debugPrint("Erro ao agendar expressões: $e");
     }
 
-    if (Platform.isWindows) {
+    if (!kIsWeb && Platform.isWindows) {
       debugPrint("TTS: Iniciando fala em modo isolado...");
     }
 
     try {
       // Limpeza de buffer e remoção de handlers perigosos no Windows
       // AVISO: Não sete handlers (mesmo vazios) no Windows para evitar erro de threading nativo
-      if (Platform.isWindows) {
+      if (!kIsWeb && Platform.isWindows) {
         await tts.stop(); 
       }
       
@@ -551,7 +530,7 @@ class RobotState extends ChangeNotifier {
     int scheduledCount = 0;
 
     for (var word in words) {
-      if (!Platform.isWindows && scheduledCount > 15) break; // Limite de 15 expressões por frase para evitar crash de Timers
+      if (kIsWeb || (!Platform.isWindows && scheduledCount > 15)) break; // Limite de 15 expressões por frase para evitar crash de Timers
       
       final cleanWord = word.replaceAll(RegExp(r'[^\w\s]'), '');
       final expression = ExpressionMapper.getExpressionForWord(cleanWord);

@@ -49,6 +49,9 @@ class CognitiveBus {
   static const int _maxRecursion = 10;
 
   int dispatch(Event event) {
+    if (event.name != "sensor.pulse") {
+      debugPrint("BUS: Despachando ${event.name} de ${event.source}");
+    }
     if (_dispatchRecursionLevel > _maxRecursion) {
       debugPrint("BUS CRITICAL: Recursão infinita detectada no evento ${event.name}! Bloqueando.");
       return 0;

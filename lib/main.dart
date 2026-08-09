@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -27,12 +28,14 @@ void main() async {
     // 0. Initialize Firebase
     try {
       if (Firebase.apps.isEmpty) {
+        // Na Web, o DefaultFirebaseOptions pode não estar configurado.
+        // Tentamos inicializar apenas se houver configuração disponível.
         await Firebase.initializeApp(
           options: DefaultFirebaseOptions.currentPlatform,
         );
       }
     } catch (e) {
-      debugPrint("Firebase Init Error: $e");
+      debugPrint("Firebase Init Skip (Expected on Web if not configured): $e");
     }
 
     // 1. Seed knowledge from build-time processed files
@@ -43,7 +46,7 @@ void main() async {
 
     // 2. Conditional Android background init
     try {
-      if (Platform.isAndroid) {
+      if (!kIsWeb && Platform.isAndroid) {
         await BackgroundBrain.initialize();
         BackgroundBrain.scheduleProactiveTask();
       }
@@ -58,7 +61,7 @@ void main() async {
       ),
     );
   }, (error, stack) {
-    debugPrint("ZONED ERROR: $error");
+    debugPrint("ZONED ERROR: ${error.toString()}");
   });
 }
 
@@ -150,7 +153,7 @@ class ShellPage extends StatelessWidget {
             ),
           ),
 
-          if (state.chatHistory.isNotEmpty && (Platform.isAndroid || Platform.isIOS))
+          if (state.chatHistory.isNotEmpty && !kIsWeb && (Platform.isAndroid || Platform.isIOS))
             Positioned(
               bottom: 130,
               left: 50,
@@ -206,7 +209,7 @@ class ShellPage extends StatelessWidget {
               ),
             ),
           // Chat Overlay: Simplified bubble to avoid Windows scroll crashes
-          if (state.chatHistory.isNotEmpty && (Platform.isWindows || Platform.isLinux || Platform.isMacOS))
+          if (state.chatHistory.isNotEmpty && (kIsWeb || Platform.isWindows || Platform.isLinux || Platform.isMacOS))
             Positioned(
               bottom: 130,
               left: 50,

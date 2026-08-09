@@ -24,7 +24,7 @@ class VisionSensor extends LifecycleComponent {
 
   @override
   void initialize() {
-    if (Platform.isWindows) {
+    if (!kIsWeb && Platform.isWindows) {
       debugPrint("VisionSensor: Desativado no Windows por compatibilidade.");
       return;
     }
@@ -47,7 +47,7 @@ class VisionSensor extends LifecycleComponent {
   Future<void> _initDetector() async {
     try {
       // Detector TFLite Customizado (Apenas Android)
-      if (Platform.isAndroid) {
+      if (!kIsWeb && Platform.isAndroid) {
         final directory = await getExternalStorageDirectory();
         final modelPath = p.join(directory!.path, 'gemma3-1B-it-int4.tflite');
 

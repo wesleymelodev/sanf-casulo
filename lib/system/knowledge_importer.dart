@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/event.dart';
@@ -18,6 +19,8 @@ class KnowledgeImporter extends LifecycleComponent {
   @override
   void initialize() async {
     _statusBox = await Hive.openBox('knowledge_status');
+    
+    if (kIsWeb) return; // Sistema de arquivos local não suportado na Web
     
     // Resolve o caminho dinamicamente baseado na plataforma
     final directory = await getApplicationDocumentsDirectory();

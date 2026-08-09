@@ -15,8 +15,9 @@ class CloudSyncService extends LifecycleComponent {
 
   final CognitiveBus _bus;
   final SemanticMemory? _semanticMemory; // Referência para refresh
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseDatabase _db = FirebaseDatabase.instance;
+  
+  FirebaseAuth? _auth;
+  FirebaseDatabase? _db;
   
   StreamSubscription? _authSubscription;
   String? _userId;
@@ -34,14 +35,23 @@ class CloudSyncService extends LifecycleComponent {
 
   @override
   void initialize() {
-    _authSubscription = _auth.authStateChanges().listen((user) {
+    try {
+      // Lazy access to Firebase instances to prevent crash if not initialized
+      _auth = FirebaseAuth.instance;
+      _db = FirebaseDatabase.instance;
+    } catch (e) {
+      debugPrint("CloudSync: Firebase not available, disabling sync. $e");
+      return;
+    }
+
+    _authSubscription = _auth?.authStateChanges().listen((user) {
       if (user != null) {
         if (_userId == user.uid) return;
         _userId = user.uid;
         debugPrint("CloudSync: Usuário autenticado: $_userId");
         
-        // NO WINDOWS: DESATIVADO PULL AUTOMÁTICO PARA TESTE DE ESTABILIDADE
-        if (Platform.isAndroid || Platform.isIOS) {
+        // NO WINDOWS/WEB: DESATIVADO PULL AUTOMÁTICO PARA TESTE DE ESTABILIDADE
+        if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
           Future.delayed(const Duration(seconds: 15), () => _pullMemoriesFromCloud());
         }
 
@@ -80,7 +90,7 @@ class CloudSyncService extends LifecycleComponent {
 
   Future<void> _signInAnonymously() async {
     try {
-      await _auth.signInAnonymously();
+      await _auth?.signInAnonymously();
     } catch (e) {
       debugPrint("CloudSync: Erro ao entrar anonimamente: $e");
     }
@@ -163,19 +173,19 @@ class CloudSyncService extends LifecycleComponent {
         
         debugPrint("CloudSync: Enviando dados para o Firebase (${updates.length} itens)...");
 
-        if (Platform.isWindows) {
+        if (!kIsWeb && Platform.isWindows) {
           // No Windows, enviamos um por um com pequeno intervalo para máxima estabilidade
           for (var entry in updates.entries) {
             try {
-              await _db.ref("users/$_userId/${entry.key}").set(entry.value).timeout(const Duration(seconds: 5));
+              await _db?.ref("users/$_userId/${entry.key}").set(entry.value).timeout(const Duration(seconds: 5));
               await Future.delayed(const Duration(milliseconds: 200));
             } catch (e) {
               debugPrint("CloudSync Single Update Error: $e");
             }
           }
         } else {
-          // No Android/iOS usamos o update atômico que é mais performático
-          await _db.ref("users/$_userId").update(updates).timeout(const Duration(seconds: 15));
+          // No Android/iOS e Web usamos o update atômico que é mais performático
+          await _db?.ref("users/$_userId").update(updates).timeout(const Duration(seconds: 15));
         }
 
         debugPrint("CloudSync: Sincronização concluída.");
@@ -189,8 +199,8 @@ class CloudSyncService extends LifecycleComponent {
   Future<void> _pullMemoriesFromCloud() async {
     if (_userId == null) return;
     try {
-      final episodicSnap = await _db.ref("users/$_userId/episodic").limitToLast(50).get();
-      if (episodicSnap.exists) {
+      final episodicSnap = await _db?.ref("users/$_userId/episodic").limitToLast(50).get();
+      if (episodicSnap != null && episodicSnap.exists) {
         final box = await Hive.openBox('episodic_memory_store');
         final Map<dynamic, dynamic> cloudData = episodicSnap.value as Map;
         cloudData.forEach((key, value) {

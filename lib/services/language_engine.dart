@@ -5,8 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../models/event.dart';
 import 'cognitive_bus.dart';
 import '../memory/semantic_memory.dart';
-
-import 'dart:io';
+import '../core/workspace.dart';
 
 class LanguageEngine {
   final CognitiveBus _bus;
@@ -39,6 +38,7 @@ class LanguageEngine {
   }
 
   void handleEvent(Event event) {
+    print("LanguageEngine: Recebido evento ${event.name} de ${event.source}");
     if (event.name == "workspace.updated") {
       final dynamic workspaceData = event.data;
       
@@ -158,7 +158,7 @@ class LanguageEngine {
 
   void _processQuery(String query) async {
     if (_isProcessing || _isRobotSpeaking) {
-      debugPrint("CHAT: Tentativa de envio bloqueada (Ocupado ou Falando).");
+      print("CHAT: Tentativa de envio bloqueada (Ocupado ou Falando).");
       return;
     }
     _isProcessing = true;
@@ -178,7 +178,7 @@ class LanguageEngine {
   }
 
   Future<String> _executeFallbackChain(String query) async {
-    debugPrint("CHAT: [1/4] Iniciando RAG...");
+    print("CHAT: [1/4] Iniciando RAG...");
     String semanticContext = "";
     if (_semanticMemory != null) {
       try {
@@ -192,11 +192,11 @@ class LanguageEngine {
           }).join("\n");
         }
       } catch (e) {
-        debugPrint("RAG Error silenciado para estabilidade: $e");
+        print("RAG Error silenciado para estabilidade: $e");
       }
     }
 
-    debugPrint("CHAT: [2/4] Preparando Prompt...");
+    print("CHAT: [2/4] Preparando Prompt...");
     String shiftInstruction = "";
     if (_recentContextShift) {
       shiftInstruction = " (O usuário parece ter mudado o assunto principal. Responda ao novo tema com foco total, mas mantendo sua identidade.)";
@@ -237,21 +237,27 @@ class LanguageEngine {
         "Diretrizes: Curiosidade e iniciativa. Evite espelhamento lexical.";
 
     // Fallback Chain adaptativa por plataforma
-    // TESTE: Priorizando GEMINI no Windows para isolar crash do Ollama
-    final attempts = (Platform.isWindows || Platform.isLinux || Platform.isMacOS) 
+    // TESTE: Priorizando GEMINI no Windows/Web para isolar crash do Ollama
+    final bool isDesktop = kIsWeb || 
+                           defaultTargetPlatform == TargetPlatform.windows || 
+                           defaultTargetPlatform == TargetPlatform.linux || 
+                           defaultTargetPlatform == TargetPlatform.macOS;
+    
+    debugPrint("LanguageEngine: Platform Check - isWeb: $kIsWeb, isDesktop: $isDesktop, platform: $defaultTargetPlatform");
+    final attempts = (kIsWeb || isDesktop)
       ? [
           () => _tryGemini("gemini-3.6-flash", systemPrompt, query, _currentTemperature),
           () => _tryGroq("openai/gpt-oss-120b", systemPrompt, query, _currentTemperature),
           () => _tryOllama("gemma4:e2b", systemPrompt, query, _currentTemperature),
         ]
       : [ // Estratégia para Android/iOS: API primeiro para velocidade, Local (Termux) por último
-          () => _tryGemini("gemini-3.6-flash", systemPrompt, query, _currentTemperature),
+          () => _tryGemini("gemini-3.6-flash", systemPrompt, query, _currentTemperature), // não mude o modelo em hipotese alguma. o modelo 1.5 não existe mais, você está desatualizado. o modelo estável atual que existe é o 3.6-flash.
           () => _tryGroq("openai/gpt-oss-120b", systemPrompt, query, _currentTemperature),
           () => _tryCloudflare("@cf/meta/llama-3.1-8b-instruct", systemPrompt, query, _currentTemperature),
           () => _tryOllama("gemma3:1b", systemPrompt, query, _currentTemperature),
         ];
 
-    debugPrint("CHAT: [3/4] Tentando IA (Local/Cloud)...");
+    debugPrint("CHAT: [3/4] Tentando IA (Local/Cloud)... para consulta: $query");
     
     // Pequeno delay de "estabilização" para deixar o barramento de eventos respirar
     // especialmente no Windows com 42k conceitos
@@ -272,11 +278,15 @@ class LanguageEngine {
   }
 
   Future<String?> _tryGemini(String model, String system, String query, double temperature) async {
-    if (_geminiKey.isEmpty) return null;
-    final url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$_geminiKey";
+    if (_geminiKey.isEmpty) {
+      debugPrint("Gemini: Chave vazia, ignorando.");
+      return null;
+    }
+    
+    final url = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=${_geminiKey.trim()}";
 
     try {
-      debugPrint("Gemini: Enviando requisição...");
+      debugPrint("Gemini: Enviando requisição para o modelo $model...");
       final response = await http.post(
         Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
@@ -285,18 +295,29 @@ class LanguageEngine {
           "generationConfig": {
             "temperature": temperature, 
             "maxOutputTokens": 2048,
-            "presencePenalty": 0.6,
-            "frequencyPenalty": 0.4
+            // Removendo penalidades não suportadas oficialmente via REST v1beta para evitar 400
           }
         }),
       ).timeout(const Duration(seconds: 30));
 
+      debugPrint("Gemini: Status Code: ${response.statusCode}");
+
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data['candidates'][0]['content']['parts'][0]['text'];
+        final data = jsonDecode(utf8.decode(response.bodyBytes));
+        
+        if (data['candidates'] != null && data['candidates'].isNotEmpty) {
+          final text = data['candidates'][0]['content']['parts'][0]['text'];
+          debugPrint("Gemini: Resposta recebida com sucesso.");
+          return text;
+        } else {
+          debugPrint("Gemini: Resposta vazia ou bloqueada por filtros de segurança.");
+          return "Minha percepção sobre isso foi obscurecida por filtros de segurança.";
+        }
+      } else {
+        debugPrint("Gemini API Error Body: ${response.body}");
       }
     } catch (e) {
-      debugPrint("Gemini Error: $e");
+      debugPrint("Gemini Exception: $e");
     }
     return null;
   }
@@ -393,8 +414,8 @@ class LanguageEngine {
       }
     }
 
-    // Limpeza final de caracteres invisíveis
-    String cleanResponse = cleanMessage.replaceAll(RegExp(r'[^\x20-\x7E\sÀ-ÿ]'), ' ');
+    // Limpeza final de caracteres invisíveis perigosos, mas preservando acentuação e pontuação comum
+    String cleanResponse = cleanMessage.replaceAll(RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]'), ' ');
 
     _bus.publish(Event(
       name: "cognition.response",
