@@ -44,6 +44,7 @@ class RobotState extends ChangeNotifier {
   bool isThinking = false;
   BotExpression expression = BotExpression.idle;
   List<Map<String, String>> chatHistory = [];
+  List<Map<String, String>> activeSessionHistory = [];
   double modelTemperature = 1.0;
   double proactivityLevel = 0.6; // 0.0 a 1.0
   String userName = "Viajante";
@@ -112,6 +113,11 @@ class RobotState extends ChangeNotifier {
     webCfKey = settingsBox.get('webCfKey', defaultValue: "");
     webCfAccount = settingsBox.get('webCfAccount', defaultValue: "");
     webFirebaseConfig = Map<String, String>.from(settingsBox.get('webFirebaseConfig', defaultValue: <String, String>{}));
+    
+    final List<dynamic>? savedHistory = settingsBox.get('activeSessionHistory');
+    if (savedHistory != null) {
+      activeSessionHistory = savedHistory.map((m) => Map<String, String>.from(m as Map)).toList();
+    }
 
     // Request permissions for Android
     if (!kIsWeb && Platform.isAndroid) {
@@ -145,6 +151,7 @@ class RobotState extends ChangeNotifier {
       initialGhost: ghostName,
       geminiKey: webGeminiKey,
       groqKey: webGroqKey,
+      initialHistory: activeSessionHistory,
     );
     proactivityEngine = ProactivityEngine(bus, proactivityLevel: proactivityLevel);
     responseGenerator = ResponseGenerator(bus);
@@ -219,6 +226,11 @@ class RobotState extends ChangeNotifier {
 
     bus.subscribe("workspace.updated", (e) => languageEngine.handleEvent(e));
     bus.subscribe("cognition.proactive_thought", (e) => languageEngine.handleEvent(e));
+
+    bus.subscribe("system.config.history_updated", (e) {
+      activeSessionHistory = List<Map<String, String>>.from((e.data as List).map((m) => Map<String, String>.from(m as Map)));
+      Hive.box('settings').put('activeSessionHistory', activeSessionHistory);
+    });
 
     // SETUP ASSÍNCRONO (Não bloqueia o Kernel)
     _asyncSetup();

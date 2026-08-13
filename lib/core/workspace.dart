@@ -34,12 +34,13 @@ class CognitiveWorkspace extends LifecycleComponent {
 
   void handleEvent(Event event) {
     // FILTRO CRÍTICO: Workspace ignora métricas, batimentos e seus próprios sinais
+    // NOTA: 'cognition.response' é PERMITIDO agora para que o sistema lembre do que disse
     if (event.source == name || 
         event.name == "workspace.updated" ||
         event.name.startsWith("system.") ||
         event.name.startsWith("memory.") ||
         event.name.startsWith("attention.") ||
-        event.name.startsWith("cognition.")) {
+        (event.name.startsWith("cognition.") && event.name != "cognition.response")) {
       return;
     }
 

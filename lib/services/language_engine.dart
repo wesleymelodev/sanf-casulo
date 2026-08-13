@@ -18,6 +18,7 @@ class LanguageEngine {
   bool _recentContextShift = false;
   bool _isProcessing = false; // Cadeado de processamento
   bool _isRobotSpeaking = false;
+  final List<Map<String, String>> _activeChatHistory = [];
 
   String _geminiKey = const String.fromEnvironment('GEMINI_API_KEY');
   String _groqKey = const String.fromEnvironment('GROQ_API_KEY');
@@ -25,13 +26,14 @@ class LanguageEngine {
   String _cfAccount = const String.fromEnvironment('CLOUDFLARE_ACCOUNT_ID');
   final String ollamaHost = const String.fromEnvironment('OLLAMA_HOST', defaultValue: "http://127.0.0.1:11434");
 
-  LanguageEngine(this._bus, {SemanticMemory? semanticMemory, double initialTemp = 1.0, String initialUser = "Viajante", String initialGhost = "SANF (Spectrum Ancrolyn Nexus Fractal)", String? geminiKey, String? groqKey}) 
+  LanguageEngine(this._bus, {SemanticMemory? semanticMemory, double initialTemp = 1.0, String initialUser = "Viajante", String initialGhost = "SANF (Spectrum Ancrolyn Nexus Fractal)", String? geminiKey, String? groqKey, List<Map<String, String>>? initialHistory}) 
       : _semanticMemory = semanticMemory,
         _currentTemperature = initialTemp,
         _userName = initialUser,
         _ghostName = initialGhost {
     if (geminiKey != null && geminiKey.isNotEmpty) _geminiKey = geminiKey;
     if (groqKey != null && groqKey.isNotEmpty) _groqKey = groqKey;
+    if (initialHistory != null) _activeChatHistory.addAll(initialHistory);
     
     _bus.subscribe("cognition.speaking.start", (e) => _isRobotSpeaking = true);
     _bus.subscribe("cognition.speaking.stop", (e) => _isRobotSpeaking = false);
@@ -170,6 +172,32 @@ class LanguageEngine {
     _bus.publish(Event(name: "cognition.thinking.start", source: name));
     try {
       final response = await _executeFallbackChain(query);
+      
+      // --- REGISTRO NA MEMÓRIA DE CURTO PRAZO (ACTIVE STATE) ---
+      String cleanText = response;
+      if (response.trim().startsWith('{')) {
+        try {
+          final data = jsonDecode(response);
+          cleanText = data['message'] ?? response;
+        } catch (_) {}
+      }
+
+      _activeChatHistory.add({"role": "user", "content": query});
+      _activeChatHistory.add({"role": "assistant", "content": cleanText});
+      
+      // Mantém apenas os últimos 5 turnos (10 mensagens) para evitar overflow
+      if (_activeChatHistory.length > 10) {
+        _activeChatHistory.removeRange(0, 2);
+      }
+
+      // Notifica o sistema para persistência opcional
+      _bus.publish(Event(
+        name: "system.config.history_updated",
+        source: name,
+        data: _activeChatHistory,
+        priority: 0.1,
+      ));
+
       _publishResponse(response);
     } finally {
       _isProcessing = false;
@@ -203,6 +231,13 @@ class LanguageEngine {
       _recentContextShift = false; // Consome o flag
     }
 
+    String historyBlock = "";
+    if (_activeChatHistory.isNotEmpty) {
+      historyBlock = "\n\n--- CONTEXTO RECENTE (MEMÓRIA DE TRABALHO) ---\n" + 
+        _activeChatHistory.map((m) => "${m['role'] == 'user' ? 'Usuário' : _ghostName}: ${m['content']}").join("\n") +
+        "\n--- FIM DO CONTEXTO RECENTE ---\n";
+    }
+
     // --- ESTRATÉGIA DE DISSOLUÇÃO DE ESPELHAMENTO (PSIQUE FRACTAL) ---
     final random = Random();
     final prismStyles = [
@@ -233,7 +268,8 @@ class LanguageEngine {
         "  }\n"
         "}\n\n"
         "Estratégia Cognitiva Atual: $selectedPrism\n\n"
-        "Memória Semântica:\n$semanticContext\n\n"
+        "Memória Semântica (Conhecimento Externo):\n$semanticContext\n\n"
+        "Memória de Trabalho (Contexto da Conversa):\n$historyBlock\n\n"
         "Diretrizes: Curiosidade e iniciativa. Evite espelhamento lexical.";
 
     // Fallback Chain adaptativa por plataforma
