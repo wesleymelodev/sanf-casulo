@@ -404,7 +404,7 @@ class LanguageEngine {
         "system": system,
         "query": query,
         "temperature": temperature,
-      });
+      }).timeout(const Duration(seconds: 300));
       
       return result;
     } catch (e) {
