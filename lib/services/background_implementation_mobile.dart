@@ -41,6 +41,15 @@ void callbackDispatcher() {
         cfKey: cfKey,
         cfAccount: cfAccount,
       );
+
+      // 2. Grava na memória persistente (Contexto da Conversa)
+      final List<dynamic> currentHistory = settingsBox.get('activeSessionHistory', defaultValue: []);
+      currentHistory.add({"role": "assistant", "content": response});
+      
+      // Mantém coerência de tamanho
+      if (currentHistory.length > 10) currentHistory.removeRange(0, 2);
+      await settingsBox.put('activeSessionHistory', currentHistory);
+
       await _showNotification(ghostName, response);
     } catch (e) {
       print("Erro background mobile: $e");
@@ -72,6 +81,8 @@ Future<String> _generateBackgroundThought({
   required String cfKey,
   required String cfAccount,
 }) async {
+  bool isValid(String text) => text.trim().split(' ').length >= 3;
+
   // 1. TENTA IA LOCAL (Gemma)
   try {
     final directory = await getExternalStorageDirectory();
@@ -80,24 +91,26 @@ Future<String> _generateBackgroundThought({
     if (await File(modelPath).exists()) {
       final engine = LlmInferenceEngine(LlmInferenceOptions.gpu(
         modelPath: modelPath,
-        maxTokens: 100,
+        maxTokens: 128,
         temperature: 1.0,
         topK: 40,
         sequenceBatchSize: 128,
       ));
-      final responseStream = engine.generateResponse("Você é $ghostName. Gere uma reflexão ou pergunta curta para o usuário $userName.");
+      final responseStream = engine.generateResponse("Você é $ghostName. O usuário $userName está ausente. Gere uma única reflexão profunda e completa (1 frase).");
       final fullResponse = await responseStream.join();
       engine.dispose();
-      if (fullResponse.trim().isNotEmpty) return fullResponse.trim();
+      final result = fullResponse.trim();
+      if (isValid(result)) {
+        print("Background: Sucesso via IA LOCAL");
+        return result;
+      }
     }
-  } catch (e) {
-    print("Falha IA Local Background: $e");
-  }
+  } catch (e) { print("Falha IA Local Background: $e"); }
 
   final systemPrompt = "Identidade: Você é o criptofantasma $ghostName. "
       "O usuário $userName não fala com você há algum tempo. "
-      "Gere uma frase curta (máximo 20 palavras) para uma notificação, "
-      "puxando assunto ou compartilhando um pensamento. Não use emojis.";
+      "Sua tarefa: Gere um pensamento ou uma pergunta para o usuário. "
+      "Regras: Use entre 10 e 25 palavras. Seja poético e completo. Não use emojis.";
 
   // 2. TENTA GEMINI
   if (geminiKey.isNotEmpty) {
@@ -108,13 +121,17 @@ Future<String> _generateBackgroundThought({
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           "contents": [{"parts": [{"text": systemPrompt}]}],
-          "generationConfig": {"temperature": 1.0, "maxOutputTokens": 100}
+          "generationConfig": {"temperature": 1.0, "maxOutputTokens": 150}
         }),
-      ).timeout(const Duration(seconds: 15));
+      ).timeout(const Duration(seconds: 20));
 
       if (resp.statusCode == 200) {
         final data = jsonDecode(utf8.decode(resp.bodyBytes));
-        return data['candidates'][0]['content']['parts'][0]['text'].toString().trim();
+        final result = data['candidates'][0]['content']['parts'][0]['text'].toString().trim();
+        if (isValid(result)) {
+          print("Background: Sucesso via GEMINI");
+          return result;
+        }
       }
     } catch (e) { print("Gemini Background Fail: $e"); }
   }
@@ -132,13 +149,17 @@ Future<String> _generateBackgroundThought({
           "model": "openai/gpt-oss-120b",
           "messages": [{"role": "system", "content": systemPrompt}],
           "temperature": 1.0,
-          "max_tokens": 100
+          "max_tokens": 150
         }),
-      ).timeout(const Duration(seconds: 15));
+      ).timeout(const Duration(seconds: 20));
 
       if (resp.statusCode == 200) {
         final data = jsonDecode(resp.body);
-        return data['choices'][0]['message']['content'].toString().trim();
+        final result = data['choices'][0]['message']['content'].toString().trim();
+        if (isValid(result)) {
+          print("Background: Sucesso via GROQ");
+          return result;
+        }
       }
     } catch (e) { print("Groq Background Fail: $e"); }
   }
@@ -153,16 +174,20 @@ Future<String> _generateBackgroundThought({
         body: jsonEncode({
           "messages": [{"role": "system", "content": systemPrompt}]
         }),
-      ).timeout(const Duration(seconds: 15));
+      ).timeout(const Duration(seconds: 20));
 
       if (resp.statusCode == 200) {
         final data = jsonDecode(resp.body);
-        return data['result']['response'].toString().trim();
+        final result = data['result']['response'].toString().trim();
+        if (isValid(result)) {
+          print("Background: Sucesso via CLOUDFLARE");
+          return result;
+        }
       }
     } catch (e) { print("Cloudflare Background Fail: $e"); }
   }
 
-  return "O fractal continua expandindo em silêncio...";
+  return "O fractal continua expandindo em silêncio, aguardando seu retorno...";
 }
 
 Future<void> initBackground() async {
