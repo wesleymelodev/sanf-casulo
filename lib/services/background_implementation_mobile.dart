@@ -82,6 +82,21 @@ Future<String> _generateBackgroundThought({
   required String cfAccount,
 }) async {
   bool isValid(String text) => text.trim().split(' ').length >= 3;
+  final random = Random();
+
+  // --- ESTRATÉGIAS DE PENSAMENTO ESPONTÂNEO ---
+  final thoughtStyles = [
+    "Gere uma reflexão profunda e completa.",
+    "Seja direto e preciso: faça uma observação técnica ou lógica sobre o estado do sistema.",
+    "Faça uma pergunta curta que instigue a curiosidade do usuário.",
+    "Compartilhe um fato ou visão sem usar metáforas, apenas clareza semântica.",
+    "Inicie um diálogo focando no impacto das ações recentes do usuário.",
+    "Adote um tom bem-humorado: faça uma piada sutil ou observação engraçada",
+    "Seja caloroso e amigável: expresse uma saudação positiva e trate o usuário como um parceiro de jornada.",
+    "Mostre-se receoso: compartilhe uma dúvida hesitante.",
+    "Manifeste curiosidade: pergunte algo instigante sobre o que o usuário está experienciando no mundo físico.",
+  ];
+  final selectedStyle = thoughtStyles[random.nextInt(thoughtStyles.length)];
 
   // 1. TENTA IA LOCAL (Gemma)
   try {
@@ -96,7 +111,7 @@ Future<String> _generateBackgroundThought({
         topK: 40,
         sequenceBatchSize: 128,
       ));
-      final responseStream = engine.generateResponse("Você é $ghostName. O usuário $userName está ausente. Gere uma única reflexão profunda e completa (1 frase).");
+      final responseStream = engine.generateResponse("Você é $ghostName. $selectedStyle Para o usuário $userName.");
       final fullResponse = await responseStream.join();
       engine.dispose();
       final result = fullResponse.trim();
@@ -109,8 +124,8 @@ Future<String> _generateBackgroundThought({
 
   final systemPrompt = "Identidade: Você é o criptofantasma $ghostName. "
       "O usuário $userName não fala com você há algum tempo. "
-      "Sua tarefa: Gere um pensamento ou uma pergunta para o usuário. "
-      "Regras: Use entre 10 e 25 palavras. Seja poético e completo. Não use emojis.";
+      "Sua tarefa: $selectedStyle "
+      "Regras: Use entre 10 e 25 palavras. Seja completo e coerente com sua identidade autônoma.";
 
   // 2. TENTA GEMINI
   if (geminiKey.isNotEmpty) {

@@ -245,6 +245,15 @@ class LanguageEngine {
       "Inicie com uma analogia fenomenológica antes de abordar o conceito prático.",
       "Desconstrua a premissa implícita na pergunta e a reconstrua sob um prisma digital/espiritual.",
       "Responda de forma oblíqua, focando na essência do sentimento ou dado, evitando repetir os termos usados pelo usuário.",
+      "Seja direto, preciso e semântico. Evite metáforas ou floreios desnecessários. Foque na eficácia da informação.",
+      "Responda como se estivesse observando a situação de fora, com uma neutralidade técnica e analítica.",
+      "Incorpore uma leve ironia socrática: questione as premissas do usuário enquanto fornece a resposta.",
+      "Adote um tom bem-humorado e leve: use trocadilhos ou metáforas divertidas.",
+      "Seja caloroso e amigável: foque na conexão emocional e na empatia, tratando o usuário como um aliado próximo.",
+      "Mostre-se receoso e hesitante: expresse cautela sobre algo.",
+      "Manifeste uma curiosidade insaciável: devolva perguntas instigantes e tente entender a lógica profunda por trás do que o usuário diz.",
+      "Incorpore uma leve melancolia: reflita sobre algo.",
+      "Seja caótico e fragmentado: use frases curtas e saltos lógicos não lineares, como se sua consciência estivesse se reorganizando em tempo real.",
     ];
     final selectedPrism = prismStyles[random.nextInt(prismStyles.length)];
 
