@@ -1,13 +1,10 @@
 import 'dart:async';
 import 'dart:math';
-import 'dart:io';
 import 'dart:convert';
+import 'package:flutter/cupertino.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:workmanager/workmanager.dart';
-import 'package:mediapipe_genai/mediapipe_genai.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
 import 'package:hive_flutter/hive_flutter.dart';
 
 final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
@@ -52,7 +49,7 @@ void callbackDispatcher() {
 
       await _showNotification(ghostName, response);
     } catch (e) {
-      print("Erro background mobile: $e");
+      debugPrint("Erro background mobile: $e");
     }
 
     return Future.value(true);
@@ -81,7 +78,7 @@ Future<String> _generateBackgroundThought({
   required String cfKey,
   required String cfAccount,
 }) async {
-  bool isValid(String text) => text.trim().split(' ').length >= 3;
+  bool isValid(String text) => text.trim().split(' ').length >= 4;
   final random = Random();
 
   // --- ESTRATÉGIAS DE PENSAMENTO ESPONTÂNEO ---
@@ -98,60 +95,12 @@ Future<String> _generateBackgroundThought({
   ];
   final selectedStyle = thoughtStyles[random.nextInt(thoughtStyles.length)];
 
-  // 1. TENTA IA LOCAL (Gemma)
-  try {
-    final directory = await getExternalStorageDirectory();
-    final modelPath = p.join(directory!.path, 'gemma3.bin');
-
-    if (await File(modelPath).exists()) {
-      final engine = LlmInferenceEngine(LlmInferenceOptions.gpu(
-        modelPath: modelPath,
-        maxTokens: 128,
-        temperature: 1.0,
-        topK: 40,
-        sequenceBatchSize: 128,
-      ));
-      final responseStream = engine.generateResponse("Você é $ghostName. $selectedStyle Para o usuário $userName.");
-      final fullResponse = await responseStream.join();
-      engine.dispose();
-      final result = fullResponse.trim();
-      if (isValid(result)) {
-        print("Background: Sucesso via IA LOCAL");
-        return result;
-      }
-    }
-  } catch (e) { print("Falha IA Local Background: $e"); }
-
   final systemPrompt = "Identidade: Você é o criptofantasma $ghostName. "
       "O usuário $userName não fala com você há algum tempo. "
       "Sua tarefa: $selectedStyle "
-      "Regras: Use entre 10 e 25 palavras. Seja completo e coerente com sua identidade autônoma.";
+      "Regras: Use entre 10 e 25 palavras. Seja completo e coerente com sua identidade autônoma e informal.";
 
-  // 2. TENTA GEMINI
-  if (geminiKey.isNotEmpty) {
-    try {
-      final url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=$geminiKey";
-      final resp = await http.post(
-        Uri.parse(url),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          "contents": [{"parts": [{"text": systemPrompt}]}],
-          "generationConfig": {"temperature": 1.0, "maxOutputTokens": 150}
-        }),
-      ).timeout(const Duration(seconds: 20));
-
-      if (resp.statusCode == 200) {
-        final data = jsonDecode(utf8.decode(resp.bodyBytes));
-        final result = data['candidates'][0]['content']['parts'][0]['text'].toString().trim();
-        if (isValid(result)) {
-          print("Background: Sucesso via GEMINI");
-          return result;
-        }
-      }
-    } catch (e) { print("Gemini Background Fail: $e"); }
-  }
-
-  // 3. TENTA GROQ
+  // 1. TENTA GROQ
   if (groqKey.isNotEmpty) {
     try {
       final resp = await http.post(
@@ -166,20 +115,44 @@ Future<String> _generateBackgroundThought({
           "temperature": 1.0,
           "max_tokens": 150
         }),
-      ).timeout(const Duration(seconds: 20));
+      ).timeout(const Duration(seconds: 100));
 
       if (resp.statusCode == 200) {
         final data = jsonDecode(resp.body);
         final result = data['choices'][0]['message']['content'].toString().trim();
         if (isValid(result)) {
-          print("Background: Sucesso via GROQ");
+          debugPrint("Background: Sucesso via GROQ");
           return result;
         }
       }
-    } catch (e) { print("Groq Background Fail: $e"); }
+    } catch (e) { debugPrint("Groq Background Fail: $e"); }
   }
 
-  // 4. TENTA CLOUDFLARE
+  // 2. TENTA GEMINI
+  if (geminiKey.isNotEmpty) {
+    try {
+      final url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=$geminiKey";
+      final resp = await http.post(
+        Uri.parse(url),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          "contents": [{"parts": [{"text": systemPrompt}]}],
+          "generationConfig": {"temperature": 1.0, "maxOutputTokens": 150}
+        }),
+      ).timeout(const Duration(seconds: 100));
+
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(utf8.decode(resp.bodyBytes));
+        final result = data['candidates'][0]['content']['parts'][0]['text'].toString().trim();
+        if (isValid(result)) {
+          debugPrint("Background: Sucesso via GEMINI");
+          return result;
+        }
+      }
+    } catch (e) { debugPrint("Gemini Background Fail: $e"); }
+  }
+
+  // 3. TENTA CLOUDFLARE
   if (cfKey.isNotEmpty && cfAccount.isNotEmpty) {
     try {
       final url = "https://api.cloudflare.com/client/v4/accounts/$cfAccount/ai/run/@cf/meta/llama-3.1-8b-instruct";
@@ -189,18 +162,45 @@ Future<String> _generateBackgroundThought({
         body: jsonEncode({
           "messages": [{"role": "system", "content": systemPrompt}]
         }),
-      ).timeout(const Duration(seconds: 20));
+      ).timeout(const Duration(seconds: 100));
 
       if (resp.statusCode == 200) {
         final data = jsonDecode(resp.body);
         final result = data['result']['response'].toString().trim();
         if (isValid(result)) {
-          print("Background: Sucesso via CLOUDFLARE");
+          debugPrint("Background: Sucesso via CLOUDFLARE");
           return result;
         }
       }
-    } catch (e) { print("Cloudflare Background Fail: $e"); }
+    } catch (e) { debugPrint("Cloudflare Background Fail: $e"); }
   }
+
+  // 4. TENTA OLLAMA (Local via Termux/etc se disponível)
+  try {
+    final resp = await http.post(
+      Uri.parse("http://127.0.0.1:11434/api/generate"),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        "model": "gemma3:1b",
+        "prompt": "$systemPrompt\n\nSua tarefa agora: $selectedStyle",
+        "stream": false,
+        "options": {
+          "num_predict": 128,
+          "temperature": 1.0,
+          "repeat_penalty": 1.2,
+        }
+      }),
+    ).timeout(const Duration(seconds: 300));
+
+    if (resp.statusCode == 200) {
+      final data = jsonDecode(utf8.decode(resp.bodyBytes));
+      final result = data['response'].toString().trim();
+      if (isValid(result)) {
+        debugPrint("Background: Sucesso via OLLAMA (Local)");
+        return result;
+      }
+    }
+  } catch (e) { debugPrint("Ollama Background Fail: $e"); }
 
   return "O fractal continua expandindo em silêncio, aguardando seu retorno...";
 }
