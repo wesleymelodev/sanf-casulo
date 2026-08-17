@@ -78,7 +78,7 @@ Future<String> _generateBackgroundThought({
   required String cfKey,
   required String cfAccount,
 }) async {
-  bool isValid(String text) => text.trim().split(' ').length >= 4;
+  bool isValid(String text) => text.trim().split(' ').length >= 3;
   final random = Random();
 
   // --- ESTRATÉGIAS DE PENSAMENTO ESPONTÂNEO ---
@@ -115,15 +115,17 @@ Future<String> _generateBackgroundThought({
           "temperature": 1.0,
           "max_tokens": 150
         }),
-      ).timeout(const Duration(seconds: 100));
+      ).timeout(const Duration(seconds: 30));
 
       if (resp.statusCode == 200) {
-        final data = jsonDecode(resp.body);
+        final data = jsonDecode(utf8.decode(resp.bodyBytes));
         final result = data['choices'][0]['message']['content'].toString().trim();
         if (isValid(result)) {
           debugPrint("Background: Sucesso via GROQ");
           return result;
         }
+      } else {
+        debugPrint("Groq Background Error: ${resp.statusCode} - ${resp.body}");
       }
     } catch (e) { debugPrint("Groq Background Fail: $e"); }
   }
@@ -139,15 +141,19 @@ Future<String> _generateBackgroundThought({
           "contents": [{"parts": [{"text": systemPrompt}]}],
           "generationConfig": {"temperature": 1.0, "maxOutputTokens": 150}
         }),
-      ).timeout(const Duration(seconds: 100));
+      ).timeout(const Duration(seconds: 30));
 
       if (resp.statusCode == 200) {
         final data = jsonDecode(utf8.decode(resp.bodyBytes));
-        final result = data['candidates'][0]['content']['parts'][0]['text'].toString().trim();
-        if (isValid(result)) {
-          debugPrint("Background: Sucesso via GEMINI");
-          return result;
+        if (data['candidates'] != null && data['candidates'].isNotEmpty) {
+          final result = data['candidates'][0]['content']['parts'][0]['text'].toString().trim();
+          if (isValid(result)) {
+            debugPrint("Background: Sucesso via GEMINI");
+            return result;
+          }
         }
+      } else {
+        debugPrint("Gemini Background Error: ${resp.statusCode} - ${resp.body}");
       }
     } catch (e) { debugPrint("Gemini Background Fail: $e"); }
   }
@@ -162,10 +168,10 @@ Future<String> _generateBackgroundThought({
         body: jsonEncode({
           "messages": [{"role": "system", "content": systemPrompt}]
         }),
-      ).timeout(const Duration(seconds: 100));
+      ).timeout(const Duration(seconds: 30));
 
       if (resp.statusCode == 200) {
-        final data = jsonDecode(resp.body);
+        final data = jsonDecode(utf8.decode(resp.bodyBytes));
         final result = data['result']['response'].toString().trim();
         if (isValid(result)) {
           debugPrint("Background: Sucesso via CLOUDFLARE");
@@ -190,7 +196,7 @@ Future<String> _generateBackgroundThought({
           "repeat_penalty": 1.2,
         }
       }),
-    ).timeout(const Duration(seconds: 300));
+    ).timeout(const Duration(seconds: 60));
 
     if (resp.statusCode == 200) {
       final data = jsonDecode(utf8.decode(resp.bodyBytes));
