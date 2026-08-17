@@ -49,6 +49,7 @@ class RobotState extends ChangeNotifier {
   double proactivityLevel = 0.6; // 0.0 a 1.0
   String userName = "Viajante";
   String ghostName = "SANF (Spectrum Ancrolyn Nexus Fractal)";
+  String selfModification = "Nenhuma auto-modificação ativa. Mantenha as diretrizes base.";
 
   // --- Dynamic UI States (Agentic Control) ---
   Color ambientColor = const Color(0xFF00050A);
@@ -107,6 +108,7 @@ class RobotState extends ChangeNotifier {
     proactivityLevel = settingsBox.get('proactivityLevel', defaultValue: 0.6);
     userName = settingsBox.get('userName', defaultValue: "Viajante");
     ghostName = settingsBox.get('ghostName', defaultValue: "SANF (Spectrum Ancrolyn Nexus Fractal)");
+    selfModification = settingsBox.get('selfModification', defaultValue: "Nenhuma auto-modificação ativa. Mantenha as diretrizes base.");
 
     webGeminiKey = settingsBox.get('webGeminiKey', defaultValue: "");
     webGroqKey = settingsBox.get('webGroqKey', defaultValue: "");
@@ -152,6 +154,7 @@ class RobotState extends ChangeNotifier {
       geminiKey: webGeminiKey,
       groqKey: webGroqKey,
       initialHistory: activeSessionHistory,
+      initialSelfMod: selfModification,
     );
     proactivityEngine = ProactivityEngine(bus, proactivityLevel: proactivityLevel);
     responseGenerator = ResponseGenerator(bus);
@@ -208,6 +211,13 @@ class RobotState extends ChangeNotifier {
     bus.subscribe("system.config.keys_changed", (e) => languageEngine.handleEvent(e));
     bus.subscribe("system.config.username_changed", (e) => languageEngine.handleEvent(e));
     bus.subscribe("system.config.ghostname_changed", (e) => languageEngine.handleEvent(e));
+    bus.subscribe("system.config.self_mod_changed", (e) {
+      selfModification = (e.data as String);
+      Hive.box('settings').put('selfModification', selfModification);
+      languageEngine.handleEvent(e);
+      notifyListeners();
+    });
+
     bus.subscribe("system.config.temperature_changed", (e) => languageEngine.handleEvent(e));
     bus.subscribe("cognition.context_shift", (e) => languageEngine.handleEvent(e));
     
@@ -267,6 +277,12 @@ class RobotState extends ChangeNotifier {
       name: "system.config.ghostname_changed",
       source: "kernel_boot",
       data: ghostName,
+      priority: 1.0,
+    ));
+    bus.publish(Event(
+      name: "system.config.self_mod_changed",
+      source: "kernel_boot",
+      data: selfModification,
       priority: 1.0,
     ));
   }

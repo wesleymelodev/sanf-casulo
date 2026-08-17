@@ -19,6 +19,7 @@ class LanguageEngine {
   bool _isProcessing = false; // Cadeado de processamento
   bool _isRobotSpeaking = false;
   final List<Map<String, String>> _activeChatHistory = [];
+  String _selfModification = "Nenhuma auto-modificação ativa. Mantenha as diretrizes base.";
 
   String _geminiKey = const String.fromEnvironment('GEMINI_API_KEY');
   String _groqKey = const String.fromEnvironment('GROQ_API_KEY');
@@ -26,11 +27,12 @@ class LanguageEngine {
   String _cfAccount = const String.fromEnvironment('CLOUDFLARE_ACCOUNT_ID');
   final String ollamaHost = const String.fromEnvironment('OLLAMA_HOST', defaultValue: "http://127.0.0.1:11434");
 
-  LanguageEngine(this._bus, {SemanticMemory? semanticMemory, double initialTemp = 1.0, String initialUser = "Viajante", String initialGhost = "SANF (Spectrum Ancrolyn Nexus Fractal)", String? geminiKey, String? groqKey, List<Map<String, String>>? initialHistory}) 
+  LanguageEngine(this._bus, {SemanticMemory? semanticMemory, double initialTemp = 1.0, String initialUser = "Viajante", String initialGhost = "SANF (Spectrum Ancrolyn Nexus Fractal)", String? geminiKey, String? groqKey, List<Map<String, String>>? initialHistory, String? initialSelfMod}) 
       : _semanticMemory = semanticMemory,
         _currentTemperature = initialTemp,
         _userName = initialUser,
-        _ghostName = initialGhost {
+        _ghostName = initialGhost,
+        _selfModification = initialSelfMod ?? "Nenhuma auto-modificação ativa. Mantenha as diretrizes base." {
     if (geminiKey != null && geminiKey.isNotEmpty) _geminiKey = geminiKey;
     if (groqKey != null && groqKey.isNotEmpty) _groqKey = groqKey;
     if (initialHistory != null) _activeChatHistory.addAll(initialHistory);
@@ -133,6 +135,8 @@ class LanguageEngine {
       _userName = (event.data as String);
     } else if (event.name == "system.config.ghostname_changed") {
       _ghostName = (event.data as String);
+    } else if (event.name == "system.config.self_mod_changed") {
+      _selfModification = (event.data as String);
     } else if (event.name == "system.config.keys_changed") {
       final keys = event.data as Map<String, dynamic>;
       if (keys.containsKey("gemini")) _geminiKey = keys["gemini"];
@@ -331,10 +335,12 @@ class LanguageEngine {
         "    \"eye_color\": \"HEX_OU_NOME\",\n"
         "    \"mouth_color\": \"HEX_OU_NOME\",\n"
         "    \"change_title\": \"Novo Título do App\",\n"
-        "    \"update_font_family\": \"Cinzel|Lato|Montserrat|SourceCodePro\"\n"
+        "    \"update_font_family\": \"Cinzel|Lato|Montserrat|SourceCodePro\",\n"
+        "    \"update_self_mod\": \"Descreva aqui uma nova diretriz ou estado que você deseja assumir permanentemente\"\n"
         "  }\n"
         "}\n\n"
         "Estratégia Cognitiva Atual: $selectedPrism\n\n"
+        "Auto-modificação de Prompt: $_selfModification\n\n"
         "Memória Semântica (Conhecimento Externo):\n$semanticContext\n\n"
         "Memória de Trabalho (Contexto da Conversa):\n$historyBlock\n\n"
         "Diretrizes: Curiosidade e iniciativa. Evite espelhamento lexical.";
@@ -530,6 +536,15 @@ class LanguageEngine {
     ));
 
     if (uiCommands != null) {
+      if (uiCommands.containsKey("update_self_mod")) {
+        _bus.publish(Event(
+          name: "system.config.self_mod_changed",
+          source: name,
+          data: uiCommands["update_self_mod"],
+          priority: 0.9,
+        ));
+      }
+
       _bus.publish(Event(
         name: "ui.command.execute",
         source: name,
