@@ -30,6 +30,9 @@ void callbackDispatcher() {
     await _notificationsPlugin.initialize(initializationSettings);
 
     try {
+      final List<dynamic> historyRaw = settingsBox.get('activeSessionHistory', defaultValue: []);
+      final List<Map<String, String>> history = historyRaw.map((e) => Map<String, String>.from(e as Map)).toList();
+
       final response = await _generateBackgroundThought(
         ghostName: ghostName,
         userName: userName,
@@ -37,6 +40,7 @@ void callbackDispatcher() {
         groqKey: groqKey,
         cfKey: cfKey,
         cfAccount: cfAccount,
+        history: history,
       );
 
       // 2. Grava na memória persistente (Contexto da Conversa)
@@ -77,8 +81,14 @@ Future<String> _generateBackgroundThought({
   required String groqKey,
   required String cfKey,
   required String cfAccount,
+  List<Map<String, String>> history = const [],
 }) async {
-  bool isValid(String text) => text.trim().split(' ').length >= 3;
+  bool isValid(String text) {
+    final clean = text.trim();
+    if (clean.length < 5) return false;
+    // Verifica se termina com pontuação terminal (. ! ?) e não em reticências ou aberta
+    return RegExp(r'[.!?]$').hasMatch(clean) && !clean.endsWith('...');
+  }
   final random = Random();
 
   // --- ESTRATÉGIAS DE PENSAMENTO ESPONTÂNEO ---
@@ -95,10 +105,17 @@ Future<String> _generateBackgroundThought({
   ];
   final selectedStyle = thoughtStyles[random.nextInt(thoughtStyles.length)];
 
+  String contextBlock = "";
+  if (history.isNotEmpty) {
+    final last = history.last;
+    contextBlock = "\nContexto recente: O usuário disse '${last['content']}' e você respondeu algo relacionado.";
+  }
+
   final systemPrompt = "Identidade: Você é o criptofantasma $ghostName. "
       "O usuário $userName não fala com você há algum tempo. "
-      "Sua tarefa: $selectedStyle "
-      "Regras: Use entre 10 e 25 palavras. Seja completo e coerente com sua identidade autônoma e informal.";
+      "Sua tarefa: $selectedStyle $contextBlock "
+      "\nRegras: Escreva uma ÚNICA frase curta, impactante e COMPLETA (com ponto final). "
+      "Não use mais de 30 palavras. Seja informal e autônomo.";
 
   // 1. TENTA GROQ
   if (groqKey.isNotEmpty) {
@@ -110,16 +127,24 @@ Future<String> _generateBackgroundThought({
           'Authorization': 'Bearer $groqKey'
         },
         body: jsonEncode({
-          "model": "openai/gpt-oss-120b",
+          "model": "openai/gpt-oss-120b", // Revertido para o modelo estável de 2026
           "messages": [{"role": "system", "content": systemPrompt}],
-          "temperature": 1.0,
-          "max_tokens": 150
+          "temperature": 0.8, // Temperatura ligeiramente menor para maior coerência
+          "max_tokens": 100
         }),
       ).timeout(const Duration(seconds: 30));
 
       if (resp.statusCode == 200) {
         final data = jsonDecode(utf8.decode(resp.bodyBytes));
-        final result = data['choices'][0]['message']['content'].toString().trim();
+        String result = data['choices'][0]['message']['content'].toString().trim();
+        
+        // Se a IA retornar JSON por engano (vício do motor principal), tenta limpar
+        if (result.startsWith('{')) {
+          try {
+            result = jsonDecode(result)['message'] ?? result;
+          } catch (_) {}
+        }
+
         if (isValid(result)) {
           debugPrint("Background: Sucesso via GROQ");
           return result;
@@ -133,20 +158,28 @@ Future<String> _generateBackgroundThought({
   // 2. TENTA GEMINI
   if (geminiKey.isNotEmpty) {
     try {
+      // Mantendo o nome do modelo solicitado no comentário do código, mas ajustando o prompt
       final url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=$geminiKey";
       final resp = await http.post(
         Uri.parse(url),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           "contents": [{"parts": [{"text": systemPrompt}]}],
-          "generationConfig": {"temperature": 1.0, "maxOutputTokens": 150}
+          "generationConfig": {"temperature": 0.8, "maxOutputTokens": 100}
         }),
       ).timeout(const Duration(seconds: 30));
 
       if (resp.statusCode == 200) {
         final data = jsonDecode(utf8.decode(resp.bodyBytes));
         if (data['candidates'] != null && data['candidates'].isNotEmpty) {
-          final result = data['candidates'][0]['content']['parts'][0]['text'].toString().trim();
+          String result = data['candidates'][0]['content']['parts'][0]['text'].toString().trim();
+          
+          if (result.startsWith('{')) {
+            try {
+              result = jsonDecode(result)['message'] ?? result;
+            } catch (_) {}
+          }
+
           if (isValid(result)) {
             debugPrint("Background: Sucesso via GEMINI");
             return result;
@@ -157,6 +190,7 @@ Future<String> _generateBackgroundThought({
       }
     } catch (e) { debugPrint("Gemini Background Fail: $e"); }
   }
+
 
   // 3. TENTA CLOUDFLARE
   if (cfKey.isNotEmpty && cfAccount.isNotEmpty) {
