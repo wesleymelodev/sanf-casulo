@@ -135,6 +135,30 @@ class EpisodicMemory extends LifecycleComponent {
     ));
   }
 
+  /// Recupera todos os episódios de uma sessão específica
+  List<Episode> getSessionEpisodes(String sessionId) {
+    final List<Episode> results = [];
+    for (var rawData in _box.values) {
+      if (rawData['session_id'] == sessionId) {
+        results.add(Episode(
+          identifier: rawData['identifier'],
+          sessionId: rawData['session_id'],
+          event: Event(
+            name: rawData['event_name'],
+            source: rawData['event_source'],
+            data: rawData['event_data'],
+            confidence: rawData['confidence'] ?? 1.0,
+            novelty: rawData['novelty'] ?? 0.0,
+            priority: rawData['priority'] ?? 0.5,
+          ),
+          salience: rawData['salience'] ?? 0.5,
+          recordedAt: DateTime.parse(rawData['recorded_at']),
+        ));
+      }
+    }
+    return results;
+  }
+
   @override
   void update(double deltaTime) {}
 

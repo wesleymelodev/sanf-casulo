@@ -124,6 +124,8 @@ class LanguageEngine {
         // Gera uma reflexão espontânea sobre o que descobriu
         _processQuery("O que você acha sobre estas novas informações que acabou de descobrir na web?\n\n${sourceEvent.data}");
       }
+    } else if (event.name == "memory.episodic.session_finalized") {
+      _consolidateSession(event.data as List<Map<String, dynamic>>);
     } else if (event.name == "cognition.proactive_thought") {
       final trigger = (event.data as Map)["trigger"];
       _processProactiveQuery(trigger.toString());
@@ -143,6 +145,41 @@ class LanguageEngine {
       if (keys.containsKey("groq")) _groqKey = keys["groq"];
     }
   }
+
+  Future<void> _consolidateSession(List<Map<String, dynamic>> dialogueTurns) async {
+    if (dialogueTurns.isEmpty) return;
+
+    final turnsText = dialogueTurns.map((t) => "${t['role']}: ${t['content']}").join("\n");
+    
+    final prompt = "Você é um motor de consolidação de memória para o $name. "
+        "Abaixo está o registro de uma interação recente. Sua tarefa é extrair fatos importantes "
+        "sobre o usuário, suas preferências, sentimentos ou novas informações compartilhadas. "
+        "Responda apenas com uma lista de fatos curtos, um por linha, começando com '- '. "
+        "Se não houver nada relevante para memorizar, responda 'NADA'.\n\n"
+        "Interação:\n$turnsText";
+
+    try {
+      final summary = await _executeFallbackChain(prompt);
+      if (summary.trim().toUpperCase() != "NADA") {
+        final facts = summary.split('\n').where((s) => s.trim().startsWith('-')).toList();
+        for (var fact in facts) {
+          final cleanFact = fact.replaceFirst('-', '').trim();
+          if (cleanFact.isNotEmpty) {
+            _bus.publish(Event(
+              name: "cognition.learning.fact",
+              source: name,
+              data: cleanFact,
+              confidence: 0.9,
+              priority: 0.8,
+            ));
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Erro na consolidação semântica: $e");
+    }
+  }
+
 
   void _processProactiveQuery(String trigger) async {
     final promptMap = {

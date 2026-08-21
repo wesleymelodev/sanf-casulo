@@ -22,6 +22,7 @@ import '../memory/semantic_memory.dart';
 import '../cognition/attention.dart';
 import '../cognition/associative_engine.dart';
 import '../cognition/reasoning.dart';
+import '../cognition/consolidation_engine.dart';
 import '../system/homeostasis.dart';
 import '../system/metrics.dart';
 import '../system/knowledge_importer.dart';
@@ -82,6 +83,7 @@ class RobotState extends ChangeNotifier {
   late final AttentionController attention;
   late final AssociativeEngine associativeEngine;
   late final ReasoningEngine reasoning;
+  late final ConsolidationEngine consolidationEngine;
   late final ResponseGenerator responseGenerator;
   late final Homeostasis homeostasis;
   late final Metrics metrics;
@@ -145,6 +147,7 @@ class RobotState extends ChangeNotifier {
     attention = AttentionController(bus);
     associativeEngine = AssociativeEngine(bus);
     reasoning = ReasoningEngine(bus);
+    consolidationEngine = ConsolidationEngine(bus, episodicMemory);
     languageEngine = LanguageEngine(
       bus, 
       semanticMemory: semanticMemory,
@@ -182,6 +185,7 @@ class RobotState extends ChangeNotifier {
     _register(attention);
     _register(associativeEngine);
     _register(reasoning);
+    _register(consolidationEngine);
     _register(proactivityEngine);
     _register(responseGenerator);
     _register(homeostasis);
