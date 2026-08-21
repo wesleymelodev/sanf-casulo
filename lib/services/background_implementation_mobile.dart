@@ -129,7 +129,7 @@ Future<String> _generateBackgroundThought({
         body: jsonEncode({
           "model": "openai/gpt-oss-120b", // Revertido para o modelo estável de 2026
           "messages": [{"role": "system", "content": systemPrompt}],
-          "temperature": 0.8, // Temperatura ligeiramente menor para maior coerência
+          "temperature": 1.0, // Temperatura ligeiramente menor para maior coerência
           "max_tokens": 100
         }),
       ).timeout(const Duration(seconds: 30));
