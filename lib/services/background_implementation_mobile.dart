@@ -165,7 +165,7 @@ Future<String> _generateBackgroundThought({
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           "contents": [{"parts": [{"text": systemPrompt}]}],
-          "generationConfig": {"temperature": 0.8, "maxOutputTokens": 100}
+          "generationConfig": {"temperature": 1.0, "maxOutputTokens": 100}
         }),
       ).timeout(const Duration(seconds: 30));
 
