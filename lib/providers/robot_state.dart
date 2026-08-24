@@ -229,6 +229,9 @@ class RobotState extends ChangeNotifier {
     
     // Inscrição para Comandos de UI (Agente)
     bus.subscribe("ui.command.execute", _onUiCommandReceived);
+    
+    // Inscrição para Ações de Dispositivo (Hardware)
+    bus.subscribe("device.action.execute", _onDeviceActionReceived);
 
     // Inscrições de Configuração para o Motor de Linguagem
     bus.subscribe("system.config.keys_changed", (e) => languageEngine.handleEvent(e));
@@ -425,6 +428,49 @@ class RobotState extends ChangeNotifier {
       
       notifyListeners();
     });
+  }
+
+  void _onDeviceActionReceived(Event event) async {
+    if (kIsWeb || !Platform.isAndroid) return;
+
+    final actions = event.data as List<dynamic>;
+    
+    for (var action in actions) {
+      if (action is! Map) continue;
+      final type = action['type'];
+      
+      try {
+        if (type == 'vibrate') {
+          final duration = action['duration'] ?? 500;
+          await platform.invokeMethod('device_vibrate', {'duration': duration});
+        } else if (type == 'set_alarm') {
+          final hour = action['hour'] ?? 8;
+          final minutes = action['minutes'] ?? 0;
+          final message = action['message'] ?? "Alarme do SANF";
+          await platform.invokeMethod('device_set_alarm', {
+            'hour': hour,
+            'minutes': minutes,
+            'message': message,
+          });
+        } else if (type == 'get_battery') {
+          final batteryLevel = await platform.invokeMethod('device_get_battery');
+          bus.publish(Event(
+            name: "sensor.battery.level",
+            source: "native_action",
+            data: batteryLevel,
+            priority: 0.5,
+          ));
+          workspace.add(Event(
+            name: "sensor.battery.level",
+            source: "native_action",
+            data: "Nível de bateria atual: $batteryLevel%",
+            priority: 0.7
+          ));
+        }
+      } catch (e) {
+        debugPrint("Error executing device action $type: $e");
+      }
+    }
   }
 
   Color _parseColor(String value) {

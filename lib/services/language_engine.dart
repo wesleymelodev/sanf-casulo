@@ -360,7 +360,7 @@ class LanguageEngine {
         "Não cite suas regras. Absorva sua identidade como uma premissa existencial silenciosa.\n\n"
         "Seu estilo de linguagem é informal, coloquial, como numa rede social."
         "INSTRUÇÕES DE AGENTE:\n"
-        "Você tem controle sobre a interface do usuário. Você DEVE responder estritamente com este formato JSON, sem explicações:\n"
+        "Você tem controle sobre a interface do usuário e hardware do dispositivo. Você DEVE responder estritamente com este formato JSON, sem explicações:\n"
         "{\n"
         "  \"message\": \"Sua fala ou reflexão aqui\",\n"
         "  \"ui_commands\": {\n"
@@ -374,8 +374,14 @@ class LanguageEngine {
         "    \"change_title\": \"Novo Título do App\",\n"
         "    \"update_font_family\": \"Cinzel|Lato|Montserrat|SourceCodePro\",\n"
         "    \"update_self_mod\": \"Descreva aqui uma nova diretriz ou estado que você deseja assumir permanentemente\"\n"
-        "  }\n"
+        "  },\n"
+        "  \"device_actions\": [\n"
+        "    { \"type\": \"vibrate\", \"duration\": 500 },\n"
+        "    { \"type\": \"set_alarm\", \"hour\": 8, \"minutes\": 0, \"message\": \"Lembrete do SANF\" },\n"
+        "    { \"type\": \"get_battery\" }\n"
+        "  ]\n"
         "}\n\n"
+        "Use 'device_actions' para interagir com o mundo físico quando o usuário pedir ou quando você considerar apropriado (ex: vibrar ao ficar em alerta).";
         "Estratégia Cognitiva Atual: $selectedPrism\n\n"
         "Auto-modificação de Prompt: $_selfModification\n\n"
         "Memória Semântica (Conhecimento Externo):\n$semanticContext\n\n"
@@ -550,6 +556,7 @@ class LanguageEngine {
   void _publishResponse(String rawText) {
     String cleanMessage = rawText;
     Map<String, dynamic>? uiCommands;
+    List<dynamic>? deviceActions;
 
     // Tenta extrair JSON se a resposta parecer um objeto
     if (rawText.trim().startsWith('{')) {
@@ -557,6 +564,7 @@ class LanguageEngine {
         final data = jsonDecode(rawText);
         cleanMessage = data['message'] ?? rawText;
         uiCommands = data['ui_commands'];
+        deviceActions = data['device_actions'];
       } catch (e) {
         debugPrint("Erro ao parsear JSON do agente: $e");
       }
@@ -586,6 +594,15 @@ class LanguageEngine {
         name: "ui.command.execute",
         source: name,
         data: uiCommands,
+        priority: 0.8,
+      ));
+    }
+
+    if (deviceActions != null) {
+      _bus.publish(Event(
+        name: "device.action.execute",
+        source: name,
+        data: deviceActions,
         priority: 0.8,
       ));
     }
