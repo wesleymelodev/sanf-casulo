@@ -91,7 +91,8 @@ flutter:
     - .env
     - assets/knowledge_seed/semantic_memory_store.hive
     - assets/knowledge_seed/knowledge_status.hive
-    - assets/prints/
+    - assets/
+    - assets/prints
   #   - images/a_dot_ham.jpeg
 
   # An image asset can refer to one or more resolution-specific "variants", see
