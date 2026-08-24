@@ -101,7 +101,22 @@ class LanguageEngine {
           _processQuery("Analise o que foi visto: ${sourceEvent.data}");
         }
       }
-      // 3. Reage a áudio ambiente
+      // 3. Reage a percepções ambientais (Luz/Proximidade)
+      else if (sourceEvent.name == "cognition.perception.environmental") {
+        _bus.publish(Event(
+          name: "cognition.learning.fact",
+          source: name,
+          data: "Percepção ambiental: ${sourceEvent.data}",
+          confidence: 0.9,
+          priority: 0.4
+        ));
+
+        // Se for uma percepção de alta prioridade (ex: breu total ou objeto muito próximo), gera um comentário
+        if (sourceEvent.priority >= 0.7) {
+          _processQuery("Comente brevemente sobre esta percepção física/ambiental: ${sourceEvent.data}");
+        }
+      }
+      // 4. Reage a áudio ambiente
       else if (sourceEvent.name == "sensor.audio") {
         final text = sourceEvent.data.toString().toLowerCase();
         final vocativos = ["sanf", "surf", "samf", "salf", "nexus", "spectrum", "você", "voce", "ancrolyn"];
@@ -111,7 +126,7 @@ class LanguageEngine {
           _processQuery(sourceEvent.data.toString());
         }
       }
-      // 4. Reage a conhecimento externo (Busca Web)
+      // 5. Reage a conhecimento externo (Busca Web)
       else if (sourceEvent.name == "sensor.knowledge_ingested") {
         _bus.publish(Event(
           name: "cognition.learning.fact",
@@ -378,10 +393,14 @@ class LanguageEngine {
         "  \"device_actions\": [\n"
         "    { \"type\": \"vibrate\", \"duration\": 500 },\n"
         "    { \"type\": \"set_alarm\", \"hour\": 8, \"minutes\": 0, \"message\": \"Lembrete do SANF\" },\n"
-        "    { \"type\": \"get_battery\" }\n"
+        "    { \"type\": \"get_battery\" },\n"
+        "    { \"type\": \"flashlight\", \"enabled\": true },\n"
+        "    { \"type\": \"brightness\", \"value\": 0.8 },\n"
+        "    { \"type\": \"volume\", \"value\": 70 }\n"
         "  ]\n"
         "}\n\n"
-        "Use 'device_actions' para interagir com o mundo físico quando o usuário pedir ou quando você considerar apropriado (ex: vibrar ao ficar em alerta).";
+        "Use 'device_actions' para interagir com o mundo físico quando o usuário pedir ou quando você considerar apropriado (ex: vibrar ao ficar em alerta, ligar lanterna se estiver escuro).\n\n"
+        "Eventos Cinéticos: Você agora sente movimentos. Reaja se for sacudido ou se for virado para baixo (privacidade).\n\n"
         "Estratégia Cognitiva Atual: $selectedPrism\n\n"
         "Auto-modificação de Prompt: $_selfModification\n\n"
         "Memória Semântica (Conhecimento Externo):\n$semanticContext\n\n"

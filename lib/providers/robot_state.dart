@@ -29,6 +29,7 @@ import '../system/knowledge_importer.dart';
 import '../system/audio_sensor.dart';
 import '../system/curiosity_sensor.dart';
 import '../system/vision_sensor.dart';
+import '../system/environmental_sensor.dart';
 import '../services/expression_mapper.dart';
 import '../services/cloud_sync_service.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -91,12 +92,14 @@ class RobotState extends ChangeNotifier {
   late final AudioSensor audioSensor;
   late final CuriositySensor curiositySensor;
   late final VisionSensor visionSensor;
+  late final EnvironmentalSensor environmentalSensor;
   late final CloudSyncService cloudSync;
   
   final FlutterTts tts = FlutterTts();
   bool _speechEnabled = false;
 
   static const platform = MethodChannel('com.lokinefrius.sanf/settings');
+  static const sensorChannel = EventChannel('com.lokinefrius.sanf/sensors');
 
   RobotState() {
     _initializeCore();
@@ -187,6 +190,7 @@ class RobotState extends ChangeNotifier {
     audioSensor = AudioSensor(bus);
     curiositySensor = CuriositySensor(bus);
     visionSensor = VisionSensor(bus);
+    environmentalSensor = EnvironmentalSensor(bus);
     cloudSync = CloudSyncService(bus, semanticMemory: semanticMemory);
 
     // REGISTRO COM LOGS DE DIAGNÓSTICO
@@ -213,6 +217,7 @@ class RobotState extends ChangeNotifier {
     _register(audioSensor);
     _register(curiositySensor);
     _register(visionSensor);
+    _register(environmentalSensor);
     _register(cloudSync);
 
     // INICIA O KERNEL IMEDIATAMENTE (Não espera por TTS ou Hive)
@@ -221,7 +226,13 @@ class RobotState extends ChangeNotifier {
 
     // Inscrições Globais
     bus.subscribe("cognition.response", _onCognitionResponse);
-    bus.subscribe("cognition.thinking.start", (e) => scheduleMicrotask(() { isThinking = true; notifyListeners(); }));
+    bus.subscribe("cognition.thinking.start", (e) {
+      scheduleMicrotask(() { 
+        isThinking = true; 
+        notifyListeners(); 
+      });
+      _vibratePattern("thinking");
+    });
     bus.subscribe("cognition.thinking.stop", (e) => scheduleMicrotask(() { isThinking = false; notifyListeners(); }));
     bus.subscribe("attention.focus.changed", _onAttentionFocusChanged);
     bus.subscribe("system.homeostasis.changed", _onHomeostasisChanged);
@@ -232,6 +243,22 @@ class RobotState extends ChangeNotifier {
     
     // Inscrição para Ações de Dispositivo (Hardware)
     bus.subscribe("device.action.execute", _onDeviceActionReceived);
+
+    // Inscrição para Sensores Nativos (Luz/Proximidade)
+    if (!kIsWeb && Platform.isAndroid) {
+      sensorChannel.receiveBroadcastStream().listen((data) {
+        if (data is Map) {
+          bus.publish(Event(
+            name: "sensor.${data['type']}",
+            source: "native_sensors",
+            data: data['value'],
+            priority: 0.3,
+          ));
+        }
+      }, onError: (err) {
+        debugPrint("Sensor Stream Error: $err");
+      });
+    }
 
     // Inscrições de Configuração para o Motor de Linguagem
     bus.subscribe("system.config.keys_changed", (e) => languageEngine.handleEvent(e));
@@ -442,7 +469,12 @@ class RobotState extends ChangeNotifier {
       try {
         if (type == 'vibrate') {
           final duration = action['duration'] ?? 500;
-          await platform.invokeMethod('device_vibrate', {'duration': duration});
+          final pattern = action['pattern'];
+          if (pattern != null) {
+            _vibratePattern(pattern.toString());
+          } else {
+            await platform.invokeMethod('device_vibrate', {'duration': duration});
+          }
         } else if (type == 'set_alarm') {
           final hour = action['hour'] ?? 8;
           final minutes = action['minutes'] ?? 0;
@@ -466,6 +498,15 @@ class RobotState extends ChangeNotifier {
             data: "Nível de bateria atual: $batteryLevel%",
             priority: 0.7
           ));
+        } else if (type == 'flashlight') {
+          final enabled = action['enabled'] ?? false;
+          await platform.invokeMethod('device_flashlight', {'enabled': enabled});
+        } else if (type == 'brightness') {
+          final brightness = (action['value'] ?? 0.5).toDouble();
+          await platform.invokeMethod('device_set_brightness', {'brightness': brightness});
+        } else if (type == 'volume') {
+          final volume = (action['value'] ?? 50).toInt();
+          await platform.invokeMethod('device_set_volume', {'volume': volume});
         }
       } catch (e) {
         debugPrint("Error executing device action $type: $e");
@@ -666,6 +707,9 @@ class RobotState extends ChangeNotifier {
       attentionFocus = event.data.toString();
     }
     isAlert = event.priority > 0.8;
+    if (isAlert) {
+      _vibratePattern("alert");
+    }
     notifyListeners();
   }
 
@@ -725,6 +769,34 @@ class RobotState extends ChangeNotifier {
       source: "input_bar",
       priority: 0.5,
     ));
+  }
+
+  void _vibratePattern(String type) async {
+    if (kIsWeb || !Platform.isAndroid) return;
+    
+    try {
+      switch (type) {
+        case "thinking":
+          await platform.invokeMethod('device_vibrate', {'duration': 50});
+          break;
+        case "alert":
+          await platform.invokeMethod('device_vibrate', {'duration': 100});
+          await Future.delayed(const Duration(milliseconds: 100));
+          await platform.invokeMethod('device_vibrate', {'duration': 100});
+          break;
+        case "error":
+        case "heavy":
+          await platform.invokeMethod('device_vibrate', {'duration': 800});
+          break;
+        case "pulse":
+          await platform.invokeMethod('device_vibrate', {'duration': 200});
+          await Future.delayed(const Duration(milliseconds: 400));
+          await platform.invokeMethod('device_vibrate', {'duration': 200});
+          break;
+      }
+    } catch (e) {
+      debugPrint("Vibration pattern error: $e");
+    }
   }
 
   @override

@@ -8,20 +8,54 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.provider.AlarmClock
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+import android.hardware.camera2.CameraManager
+import android.media.AudioManager
+import android.view.WindowManager
 import androidx.annotation.NonNull
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugin.common.EventChannel
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.ExistingPeriodicWorkPolicy
 import java.util.concurrent.TimeUnit
 
-class MainActivity : FlutterActivity() {
+class MainActivity : FlutterActivity(), SensorEventListener {
     private val CHANNEL = "com.lokinefrius.sanf/settings"
+    private val SENSOR_CHANNEL = "com.lokinefrius.sanf/sensors"
+
+    private lateinit var sensorManager: SensorManager
+    private var lightSensor: Sensor? = null
+    private var proximitySensor: Sensor? = null
+    private var accelerometer: Sensor? = null
+    private var eventSink: EventChannel.EventSink? = null
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)
+        proximitySensor = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY)
+        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, SENSOR_CHANNEL).setStreamHandler(
+            object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, sink: EventChannel.EventSink?) {
+                    eventSink = sink
+                    registerSensors()
+                }
+
+                override fun onCancel(arguments: Any?) {
+                    eventSink = null
+                    unregisterSensors()
+                }
+            }
+        )
         
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
@@ -65,6 +99,21 @@ class MainActivity : FlutterActivity() {
                 "device_get_battery" -> {
                     val level = getBatteryLevel()
                     result.success(level)
+                }
+                "device_flashlight" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    toggleFlashlight(enabled)
+                    result.success(true)
+                }
+                "device_set_brightness" -> {
+                    val brightness = call.argument<Double>("brightness")?.toFloat() ?: 0.5f
+                    setBrightness(brightness)
+                    result.success(true)
+                }
+                "device_set_volume" -> {
+                    val volume = call.argument<Int>("volume") ?: 50
+                    setVolume(volume)
+                    result.success(true)
                 }
                 else -> {
                     result.notImplemented()
@@ -119,6 +168,39 @@ class MainActivity : FlutterActivity() {
         return batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
     }
 
+    private fun toggleFlashlight(enabled: Boolean) {
+        try {
+            val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+            val cameraId = cameraManager.cameraIdList[0]
+            cameraManager.setTorchMode(cameraId, enabled)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun setBrightness(value: Float) {
+        this@MainActivity.runOnUiThread {
+            try {
+                val layoutParams = this@MainActivity.window.attributes
+                layoutParams.screenBrightness = value.coerceIn(0.01f, 1.0f)
+                this@MainActivity.window.attributes = layoutParams
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    private fun setVolume(value: Int) {
+        try {
+            val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+            val targetVolume = (maxVolume * (value / 100.0)).toInt()
+            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVolume, 0)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     private fun scheduleNativeWorker() {
         val request = PeriodicWorkRequestBuilder<ThoughtWorker>(2, TimeUnit.HOURS)
             .build()
@@ -128,5 +210,65 @@ class MainActivity : FlutterActivity() {
             ExistingPeriodicWorkPolicy.UPDATE,
             request
         )
+    }
+
+    override fun onSensorChanged(event: SensorEvent?) {
+        if (event == null) return
+        
+        val sensorData = mutableMapOf<String, Any>()
+        when (event.sensor.type) {
+            Sensor.TYPE_LIGHT -> {
+                sensorData["type"] = "light"
+                sensorData["value"] = event.values[0]
+            }
+            Sensor.TYPE_PROXIMITY -> {
+                sensorData["type"] = "proximity"
+                sensorData["value"] = event.values[0]
+            }
+            Sensor.TYPE_ACCELEROMETER -> {
+                sensorData["type"] = "accelerometer"
+                sensorData["x"] = event.values[0]
+                sensorData["y"] = event.values[1]
+                sensorData["z"] = event.values[2]
+            }
+        }
+        
+        if (sensorData.isNotEmpty()) {
+            this@MainActivity.runOnUiThread {
+                eventSink?.success(sensorData)
+            }
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+        // Not needed for now
+    }
+
+    private fun registerSensors() {
+        lightSensor?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
+        }
+        proximitySensor?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
+        }
+        accelerometer?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
+        }
+    }
+
+    private fun unregisterSensors() {
+        sensorManager.unregisterListener(this)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (eventSink != null) {
+            registerSensors()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        unregisterSensors()
     }
 }

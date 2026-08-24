@@ -47,6 +47,19 @@ class Homeostasis extends LifecycleComponent {
   void initialize() {
     _bus.subscribe("cognition.thinking.start", (e) => _isThinking = true);
     _bus.subscribe("cognition.thinking.stop", (e) => _isThinking = false);
+    _bus.subscribe("sensor.battery.level", _onBatteryChanged);
+    _bus.subscribe("sensor.light", _onLightChanged);
+  }
+
+  double _batteryLevel = 1.0;
+  double _environmentalLux = 500.0;
+
+  void _onBatteryChanged(Event event) {
+    _batteryLevel = (event.data as num).toDouble() / 100.0;
+  }
+
+  void _onLightChanged(Event event) {
+    _environmentalLux = (event.data as num).toDouble();
   }
 
   @override
@@ -55,12 +68,27 @@ class Homeostasis extends LifecycleComponent {
     if (_isThinking) load = max(load, 0.7); // Boost load when thinking
     load = min(1.0, load);
     
+    // Fator de exaustão baseado em bateria física
+    double batteryDrainFactor = 1.0;
+    if (_batteryLevel < 0.2) {
+      batteryDrainFactor = 2.5; // Drena muito mais rápido se a bateria estiver crítica
+    }
+
+    // Fator de luz: Ambientes muito escuros induzem "sono" (perda de energia lenta)
+    double lightFactor = 1.0;
+    if (_environmentalLux < 5.0 && !_isThinking) {
+      lightFactor = 1.5; 
+    }
+
     final energyDelta = (
       _config.energyRecoveryPerSecond * (1.0 - load) -
-      _config.energyDrainPerSecond * load
+      _config.energyDrainPerSecond * load * batteryDrainFactor * lightFactor
     ) * deltaTime;
 
-    final energy = (state.energy + energyDelta).clamp(0.0, 1.0);
+    // Se bateria estiver crítica, energia máxima é limitada
+    double maxEnergy = _batteryLevel < 0.15 ? 0.3 : 1.0;
+
+    final energy = (state.energy + energyDelta).clamp(0.0, maxEnergy);
     final mode = _selectMode(energy, load);
     
     final nextState = HomeostaticState(energy: energy, cognitiveLoad: load, mode: mode);
