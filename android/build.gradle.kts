@@ -1,3 +1,10 @@
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
 subprojects {
     afterEvaluate {
         if (project.hasProperty("android")) {

@@ -96,8 +96,27 @@ class RobotState extends ChangeNotifier {
   final FlutterTts tts = FlutterTts();
   bool _speechEnabled = false;
 
+  static const platform = MethodChannel('com.lokinefrius.sanf/settings');
+
   RobotState() {
     _initializeCore();
+  }
+
+  Future<void> _syncSettingsToNative() async {
+    try {
+      await platform.invokeMethod('syncSettings', {
+        'ghostName': ghostName,
+        'userName': userName,
+        'webGeminiKey': webGeminiKey,
+        'webGroqKey': webGroqKey,
+        'energy': energy,
+        'cognitiveLoad': cognitiveLoad,
+        'homeostaticMode': homeostaticMode,
+        'proactivityLevel': proactivityLevel,
+      });
+    } catch (e) {
+      debugPrint("Native Sync Error: $e");
+    }
   }
 
   void _initializeCore() async {
@@ -312,6 +331,7 @@ class RobotState extends ChangeNotifier {
       data: val,
       priority: 0.1,
     ));
+    _syncSettingsToNative();
     notifyListeners();
   }
 
@@ -324,6 +344,7 @@ class RobotState extends ChangeNotifier {
       data: name,
       priority: 0.1,
     ));
+    _syncSettingsToNative();
     notifyListeners();
   }
 
@@ -336,6 +357,7 @@ class RobotState extends ChangeNotifier {
       data: name,
       priority: 0.1,
     ));
+    _syncSettingsToNative();
     notifyListeners();
   }
 
@@ -343,6 +365,7 @@ class RobotState extends ChangeNotifier {
     webGeminiKey = key;
     Hive.box('settings').put('webGeminiKey', key);
     bus.publish(Event(name: "system.config.keys_changed", source: "ui_settings", data: {"gemini": key}));
+    _syncSettingsToNative();
     notifyListeners();
   }
 
@@ -350,6 +373,7 @@ class RobotState extends ChangeNotifier {
     webGroqKey = key;
     Hive.box('settings').put('webGroqKey', key);
     bus.publish(Event(name: "system.config.keys_changed", source: "ui_settings", data: {"groq": key}));
+    _syncSettingsToNative();
     notifyListeners();
   }
 
@@ -608,6 +632,7 @@ class RobotState extends ChangeNotifier {
     else if (modeStr == 'protective') homeostaticMode = "Protetor";
     else if (modeStr == 'restorative') homeostaticMode = "Regenerativo";
     
+    _syncSettingsToNative();
     notifyListeners();
   }
 

@@ -1,15 +1,20 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'background_implementation_web.dart' if (dart.library.io) 'background_implementation_mobile.dart' as impl;
+import 'package:flutter/services.dart';
 
 class BackgroundBrain {
+  static const platform = MethodChannel('com.lokinefrius.sanf/settings');
+
   static Future<void> initialize() async {
-    if (kIsWeb) return;
-    await impl.initBackground();
+    // A inicialização nativa agora é feita no MainActivity
   }
 
   static void scheduleProactiveTask() {
     if (kIsWeb) return;
-    impl.scheduleTask();
+    try {
+      platform.invokeMethod('scheduleWorker');
+    } catch (e) {
+      debugPrint("Error scheduling native worker: $e");
+    }
   }
 }
