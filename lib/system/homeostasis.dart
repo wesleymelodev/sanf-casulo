@@ -1,4 +1,5 @@
 import 'dart:math';
+import '../models/bot_expression.dart';
 import '../models/event.dart';
 import '../services/cognitive_bus.dart';
 import '../core/kernel.dart';
@@ -103,6 +104,25 @@ class Homeostasis extends LifecycleComponent {
         novelty: 0.0,
         priority: max(load, 1.0 - energy),
       ));
+
+      // Mapeamento automático de estado homeostático para expressão visual
+      BotExpression? autoExpression;
+      if (energy < 0.2) {
+        autoExpression = BotExpression.exhausted;
+      } else if (load > 0.8) {
+        autoExpression = BotExpression.thinking;
+      } else if (mode == RegulationMode.protective) {
+        autoExpression = BotExpression.alert;
+      }
+
+      if (autoExpression != null) {
+        _bus.publish(Event(
+          name: "ui.expression.changed",
+          source: name,
+          data: autoExpression,
+          priority: 0.6,
+        ));
+      }
     }
   }
 

@@ -24,4 +24,9 @@ enum BotExpression {
   idle, // [5,3]
   lookingDown, // [5,4]
   lookingUp, // [5,5]
+  joy,
+  exhausted,
+  thinking,
+  alert,
+  curious,
 }

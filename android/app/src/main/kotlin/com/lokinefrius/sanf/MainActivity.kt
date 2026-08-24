@@ -24,6 +24,8 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.ExistingPeriodicWorkPolicy
 import java.util.concurrent.TimeUnit
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 
 class MainActivity : FlutterActivity(), SensorEventListener {
     private val CHANNEL = "com.lokinefrius.sanf/settings"
@@ -76,6 +78,13 @@ class MainActivity : FlutterActivity(), SensorEventListener {
                     
                     if (settings.containsKey("proactivityLevel")) {
                         scheduleNativeWorker()
+                    }
+                    
+                    val ghost = settings["ghostName"] as? String ?: "SANF"
+                    startPersistentService(ghost, "Sincronizado com o núcleo.")
+
+                    if (settings.containsKey("ghostName") || settings.containsKey("eyeColor")) {
+                        updateWidget()
                     }
                     
                     result.success(true)
@@ -210,6 +219,27 @@ class MainActivity : FlutterActivity(), SensorEventListener {
             ExistingPeriodicWorkPolicy.UPDATE,
             request
         )
+    }
+
+    private fun startPersistentService(ghostName: String, status: String) {
+        val serviceIntent = Intent(applicationContext, SANFService::class.java)
+        serviceIntent.putExtra("ghostName", ghostName)
+        serviceIntent.putExtra("status", status)
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
+    }
+
+    private fun updateWidget() {
+        val intent = Intent(applicationContext, SANFWidget::class.java)
+        intent.action = AppWidgetManager.ACTION_APPWIDGET_UPDATE
+        val ids = AppWidgetManager.getInstance(applicationContext)
+            .getAppWidgetIds(ComponentName(applicationContext, SANFWidget::class.java))
+        intent.putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, ids)
+        sendBroadcast(intent)
     }
 
     override fun onSensorChanged(event: SensorEvent?) {

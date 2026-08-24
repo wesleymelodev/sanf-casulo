@@ -8,7 +8,7 @@ plugins {
 
 android {
     namespace = "com.lokinefrius.sanf"
-    compileSdk = 36
+    compileSdk = 37
     ndkVersion = "28.2.13676358"
 
     compileOptions {
@@ -23,7 +23,7 @@ android {
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 24 // Required for MediaPipe
-        targetSdk = 36
+        targetSdk = 37
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

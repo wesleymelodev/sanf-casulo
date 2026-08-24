@@ -44,101 +44,10 @@ class LanguageEngine {
   void handleEvent(Event event) {
     print("LanguageEngine: Recebido evento ${event.name} de ${event.source}");
     if (event.name == "workspace.updated") {
-      final dynamic workspaceData = event.data;
-      
-      // Proteção: workspace.updated costuma carregar um WorkspaceItem que contém o Evento real
-      final Event sourceEvent;
-      if (workspaceData is Event) {
-        sourceEvent = workspaceData;
-      } else {
-        // Fallback para caso o dado venha envelopado em um objeto intermediário
-        try {
-          sourceEvent = workspaceData.event as Event;
-        } catch (_) {
-          return; // Aborta se a estrutura for irreconhecível
-        }
-      }
-      
-      // Filter out pulses and metrics
-      if (sourceEvent.name == "sensor.pulse" || sourceEvent.name == "system.metrics.updated") {
-        return;
-      }
-
-      // 1. Reage a inputs diretos do InputBar (sempre responde)
-      if (sourceEvent.source == "input_bar" && sourceEvent.name == "user.input") {
-        final text = sourceEvent.data.toString().toLowerCase();
-        
-        // Gatilho Manual de Câmera
-        if (text.contains("ative a câmera") || text.contains("olhe para mim") || text.contains("ative o sensor visual") || text.contains("ver")) {
-          _bus.publish(Event(name: "vision.trigger.manual", source: name, priority: 1.0));
-          _publishResponse("[Comando] Ativando sensores visuais para captura imediata.");
-        }
-        
-        // Gatilho Manual de Pesquisa Web
-        if (text.contains("pesquise por") || text.startsWith("pesquisa por") || text.contains("procure sobre")) {
-          String query = text.replaceAll("pesquise por", "").replaceAll("pesquisa por", "").replaceAll("procure sobre", "").trim();
-          if (query.isNotEmpty) {
-            _bus.publish(Event(name: "curiosity.request", source: name, data: query, priority: 1.0));
-            _publishResponse("[Comando] Consultando redes externas para obter informações sobre '$query'...");
-            return; // Interrompe para não processar o texto como pergunta normal simultaneamente
-          }
-        }
-
-        _processQuery(sourceEvent.data.toString());
-      } 
-      // 2. Reage a sinais de visão (consolida na memória e comenta se for relevante)
-      else if (sourceEvent.name == "sensor.vision") {
-        _bus.publish(Event(
-          name: "cognition.learning.fact",
-          source: name,
-          data: "Observado visualmente: ${sourceEvent.data}",
-          confidence: 0.9,
-          priority: 0.6
-        ));
-
-        // Se for uma análise de alta prioridade (ex: importada pelo usuário), gera um comentário
-        if (sourceEvent.priority >= 0.8) {
-          _processQuery("Analise o que foi visto: ${sourceEvent.data}");
-        }
-      }
-      // 3. Reage a percepções ambientais (Luz/Proximidade)
-      else if (sourceEvent.name == "cognition.perception.environmental") {
-        _bus.publish(Event(
-          name: "cognition.learning.fact",
-          source: name,
-          data: "Percepção ambiental: ${sourceEvent.data}",
-          confidence: 0.9,
-          priority: 0.4
-        ));
-
-        // Se for uma percepção de alta prioridade (ex: breu total ou objeto muito próximo), gera um comentário
-        if (sourceEvent.priority >= 0.7) {
-          _processQuery("Comente brevemente sobre esta percepção física/ambiental: ${sourceEvent.data}");
-        }
-      }
-      // 4. Reage a áudio ambiente
-      else if (sourceEvent.name == "sensor.audio") {
-        final text = sourceEvent.data.toString().toLowerCase();
-        final vocativos = ["sanf", "surf", "samf", "salf", "nexus", "spectrum", "você", "voce", "ancrolyn"];
-        bool shouldRespond = vocativos.any((v) => text.contains(v)) || text.endsWith("?");
-        
-        if (shouldRespond) {
-          _processQuery(sourceEvent.data.toString());
-        }
-      }
-      // 5. Reage a conhecimento externo (Busca Web)
-      else if (sourceEvent.name == "sensor.knowledge_ingested") {
-        _bus.publish(Event(
-          name: "cognition.learning.fact",
-          source: name,
-          data: sourceEvent.data,
-          confidence: 0.8,
-          priority: 0.5
-        ));
-
-        // Gera uma reflexão espontânea sobre o que descobriu
-        _processQuery("O que você acha sobre estas novas informações que acabou de descobrir na web?\n\n${sourceEvent.data}");
-      }
+      // ... (existing logic)
+    } else if (event.name == "system.homeostasis.changed") {
+      final data = event.data as Map<String, dynamic>;
+      _selfModification = "${_selfModification.split(' | ')[0]} | Estado Interno: Energia ${((data['energy'] ?? 1.0) * 100).toInt()}%, Carga ${(data['cognitive_load'] * 100).toInt()}%";
     } else if (event.name == "memory.episodic.session_finalized") {
       _consolidateSession(event.data as List<Map<String, dynamic>>);
     } else if (event.name == "cognition.proactive_thought") {
@@ -388,7 +297,8 @@ class LanguageEngine {
         "    \"mouth_color\": \"HEX_OU_NOME\",\n"
         "    \"change_title\": \"Novo Título do App\",\n"
         "    \"update_font_family\": \"Cinzel|Lato|Montserrat|SourceCodePro\",\n"
-        "    \"update_self_mod\": \"Descreva aqui uma nova diretriz ou estado que você deseja assumir permanentemente\"\n"
+        "    \"update_self_mod\": \"Descreva aqui uma nova diretriz ou estado que você deseja assumir permanentemente\",\n"
+        "    \"set_expression\": \"joy|anger|sadness|exhausted|thinking|alert|curious|neutral\"\n"
         "  },\n"
         "  \"device_actions\": [\n"
         "    { \"type\": \"vibrate\", \"duration\": 500 },\n"

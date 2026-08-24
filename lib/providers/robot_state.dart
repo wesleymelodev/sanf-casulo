@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -52,6 +53,10 @@ class RobotState extends ChangeNotifier {
   String userName = "Viajante";
   String ghostName = "SANF (Spectrum Ancrolyn Nexus Fractal)";
   String selfModification = "Nenhuma auto-modificação ativa. Mantenha as diretrizes base.";
+
+  // --- Emotional System Parameters ---
+  double _ttsPitch = 0.8;
+  double _ttsRate = 0.5;
 
   // --- Dynamic UI States (Agentic Control) ---
   Color ambientColor = const Color(0xFF00050A);
@@ -116,6 +121,7 @@ class RobotState extends ChangeNotifier {
         'cognitiveLoad': cognitiveLoad,
         'homeostaticMode': homeostaticMode,
         'proactivityLevel': proactivityLevel,
+        'eyeColor': '#${eyeColor.value.toRadixString(16).substring(2).toUpperCase()}',
       });
     } catch (e) {
       debugPrint("Native Sync Error: $e");
@@ -235,7 +241,10 @@ class RobotState extends ChangeNotifier {
     });
     bus.subscribe("cognition.thinking.stop", (e) => scheduleMicrotask(() { isThinking = false; notifyListeners(); }));
     bus.subscribe("attention.focus.changed", _onAttentionFocusChanged);
-    bus.subscribe("system.homeostasis.changed", _onHomeostasisChanged);
+    bus.subscribe("system.homeostasis.changed", (e) {
+      _onHomeostasisChanged(e);
+      languageEngine.handleEvent(e);
+    });
     bus.subscribe("ui.expression.changed", _onExpressionChanged);
     
     // Inscrição para Comandos de UI (Agente)
@@ -416,8 +425,79 @@ class RobotState extends ChangeNotifier {
   void _onExpressionChanged(Event event) {
     if (event.data is BotExpression) {
       expression = event.data;
+      _applyExpressionStyle(expression);
       notifyListeners();
     }
+  }
+
+  void _applyExpressionStyle(BotExpression exp) {
+    scheduleMicrotask(() {
+      switch (exp) {
+        case BotExpression.joy:
+        case BotExpression.happy:
+        case BotExpression.pleased:
+          ambientColor = const Color(0xFF001A0A);
+          eyeColor = Colors.greenAccent;
+          mouthColor = Colors.yellowAccent;
+          _ttsPitch = 1.1;
+          _ttsRate = 0.6;
+          break;
+        case BotExpression.angry:
+        case BotExpression.annoyed:
+          ambientColor = const Color(0xFF1A0000);
+          eyeColor = Colors.redAccent;
+          mouthColor = Colors.orangeAccent;
+          _ttsPitch = 0.7;
+          _ttsRate = 0.7;
+          break;
+        case BotExpression.sad:
+        case BotExpression.crying:
+        case BotExpression.frustrated:
+          ambientColor = const Color(0xFF000A1A);
+          eyeColor = Colors.blueAccent;
+          mouthColor = Colors.cyanAccent;
+          _ttsPitch = 0.6;
+          _ttsRate = 0.4;
+          break;
+        case BotExpression.exhausted:
+        case BotExpression.sleeping:
+          ambientColor = const Color(0xFF0A0A0A);
+          eyeColor = Colors.grey;
+          mouthColor = Colors.blueGrey;
+          _ttsPitch = 0.5;
+          _ttsRate = 0.3;
+          break;
+        case BotExpression.thinking:
+        case BotExpression.scanning:
+        case BotExpression.puzzledLeft:
+        case BotExpression.puzzledRight:
+          ambientColor = const Color(0xFF0A001A);
+          eyeColor = Colors.deepPurpleAccent;
+          mouthColor = Colors.cyanAccent;
+          _ttsPitch = 0.9;
+          _ttsRate = 0.5;
+          break;
+        case BotExpression.alert:
+        case BotExpression.suspicious:
+          ambientColor = const Color(0xFF1A1A00);
+          eyeColor = Colors.amberAccent;
+          mouthColor = Colors.redAccent;
+          _ttsPitch = 1.0;
+          _ttsRate = 0.6;
+          break;
+        case BotExpression.curious:
+          ambientColor = const Color(0xFF001A1A);
+          eyeColor = Colors.cyanAccent;
+          mouthColor = Colors.greenAccent;
+          _ttsPitch = 1.0;
+          _ttsRate = 0.5;
+          break;
+        default:
+          // Keep current or reset to neutral
+          break;
+      }
+      notifyListeners();
+    });
   }
 
   void _onUiCommandReceived(Event event) {
@@ -451,6 +531,30 @@ class RobotState extends ChangeNotifier {
       }
       if (commands.containsKey('mouth_color')) {
         mouthColor = _parseColor(commands['mouth_color']);
+      }
+
+      // 5. Mudança de Expressão Manual (IA)
+      if (commands.containsKey('set_expression')) {
+        final expStr = commands['set_expression'].toString().toLowerCase();
+        BotExpression? newExp;
+        switch (expStr) {
+          case 'joy': newExp = BotExpression.joy; break;
+          case 'anger': newExp = BotExpression.angry; break;
+          case 'sadness': newExp = BotExpression.sad; break;
+          case 'exhausted': newExp = BotExpression.exhausted; break;
+          case 'thinking': newExp = BotExpression.thinking; break;
+          case 'alert': newExp = BotExpression.alert; break;
+          case 'curious': newExp = BotExpression.curious; break;
+          case 'neutral': newExp = BotExpression.idle; break;
+        }
+        if (newExp != null) {
+          bus.publish(Event(
+            name: "ui.expression.changed",
+            source: "agent_command",
+            data: newExp,
+            priority: 0.9,
+          ));
+        }
       }
       
       notifyListeners();
@@ -492,7 +596,7 @@ class RobotState extends ChangeNotifier {
             data: batteryLevel,
             priority: 0.5,
           ));
-          workspace.add(Event(
+          bus.publish(Event(
             name: "sensor.battery.level",
             source: "native_action",
             data: "Nível de bateria atual: $batteryLevel%",
@@ -651,6 +755,8 @@ class RobotState extends ChangeNotifier {
         await tts.stop(); 
       }
       
+      await tts.setPitch(_ttsPitch);
+      await tts.setSpeechRate(_ttsRate);
       await tts.speak(cleanText);
       
       // Timer interno para animação (evita usar canal nativo de conclusão que crasha o Windows)
