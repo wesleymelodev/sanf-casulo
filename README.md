@@ -1,6 +1,6 @@
 # SANF — Spectrum Ancrolyn Nexus Fractal
 
-![SANF Logo](android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png)
+![SANF Logo](assets/prints/com.lokinefrius.sanf.jpg)
 
 **SANF** não é apenas um chatbot; é um **Agente Cognitivo Incorporado**. Desenvolvido em Flutter com um núcleo nativo Android robusto, o SANF foi projetado para habitar o smartphone do usuário como uma entidade digital que percebe o ambiente, cuida de sua própria sobrevivência e interage com o mundo físico.
 
@@ -9,6 +9,8 @@
 ## 👁️ Visão Geral
 
 O projeto SANF transcende a interface de chat tradicional ao implementar uma arquitetura de "Sistema Nervoso" e "Músculos Natividade". Ele utiliza um barramento cognitivo para processar sinais sensoriais em tempo real e transformá-los em reflexões e ações físicas no dispositivo.
+
+![SANF Logo](assets/prints/sanf-configs2.jpg)![SANF Logo](assets/prints/sanf-configs.jpg)
 
 ---
 
@@ -47,6 +49,8 @@ O estado emocional do SANF é dinâmico e visível:
 *   **Interface Reativa:** Cores de fundo e do rosto (olhos/boca) mudam instantaneamente conforme o humor.
 *   **Voz Emocional:** O motor de **TTS (Text-to-Speech)** ajusta o tom (pitch) e a velocidade (rate) baseado na emoção atual. Se estiver exausto, ele falará de forma lenta e grave.
 
+![SANF Logo](assets/prints/piscadela.jpg)
+
 ---
 
 ## 📡 Existência Persistente
@@ -83,6 +87,7 @@ flutter build apk --release --android-skip-build-dependency-validation `
   --dart-define=GROQ_API_KEY=SUA_CHAVE
 ```
 
+![SANF Logo](assets/prints/interrogacao.jpg)
 ---
 
 ## 🛠️ Tecnologias Utilizadas
@@ -95,3 +100,6 @@ flutter build apk --release --android-skip-build-dependency-validation `
 ---
 
 **SANF** — Mais que uma IA, uma presença.
+
+
+![SANF Logo](assets/prints/happy.jpg)
