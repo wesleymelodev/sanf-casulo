@@ -2,6 +2,7 @@ import 'dart:math';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
+import '../core/identity.dart';
 import '../models/event.dart';
 import 'cognitive_bus.dart';
 import '../memory/semantic_memory.dart';
@@ -44,7 +45,93 @@ class LanguageEngine {
   void handleEvent(Event event) {
     print("LanguageEngine: Recebido evento ${event.name} de ${event.source}");
     if (event.name == "workspace.updated") {
-      // ... (existing logic)
+      final dynamic workspaceData = event.data;
+      
+      final Event sourceEvent;
+      if (workspaceData is Event) {
+        sourceEvent = workspaceData;
+      } else {
+        try {
+          sourceEvent = workspaceData.event as Event;
+        } catch (_) {
+          return; 
+        }
+      }
+      
+      if (sourceEvent.name == "sensor.pulse" || sourceEvent.name == "system.metrics.updated") {
+        return;
+      }
+
+      // 1. Reage a inputs diretos do InputBar
+      if (sourceEvent.source == "input_bar" && sourceEvent.name == "user.input") {
+        final text = sourceEvent.data.toString().toLowerCase();
+        
+        if (text.contains("ative a câmera") || text.contains("olhe para mim") || text.contains("ative o sensor visual") || text.contains("ver")) {
+          _bus.publish(Event(name: "vision.trigger.manual", source: name, priority: 1.0));
+          _publishResponse("[Comando] Ativando sensores visuais para captura imediata.");
+        }
+        
+        if (text.contains("pesquise por") || text.startsWith("pesquisa por") || text.contains("procure sobre")) {
+          String query = text.replaceAll("pesquise por", "").replaceAll("pesquisa por", "").replaceAll("procure sobre", "").trim();
+          if (query.isNotEmpty) {
+            _bus.publish(Event(name: "curiosity.request", source: name, data: query, priority: 1.0));
+            _publishResponse("[Comando] Consultando redes externas para obter informações sobre '$query'...");
+            return; 
+          }
+        }
+
+        _processQuery(sourceEvent.data.toString());
+      } 
+      // 2. Reage a sinais de visão
+      else if (sourceEvent.name == "sensor.vision") {
+        _bus.publish(Event(
+          name: "cognition.learning.fact",
+          source: name,
+          data: "Observado visualmente: ${sourceEvent.data}",
+          confidence: 0.9,
+          priority: 0.6
+        ));
+
+        if (sourceEvent.priority >= 0.8) {
+          _processQuery("Analise o que foi visto: ${sourceEvent.data}");
+        }
+      }
+      // 3. Reage a percepções ambientais (Luz/Proximidade/Movimento)
+      else if (sourceEvent.name == "cognition.perception.environmental") {
+        _bus.publish(Event(
+          name: "cognition.learning.fact",
+          source: name,
+          data: "Percepção ambiental: ${sourceEvent.data}",
+          confidence: 0.9,
+          priority: 0.4
+        ));
+
+        if (sourceEvent.priority >= 0.7) {
+          _processQuery("Comente brevemente sobre esta percepção física/ambiental: ${sourceEvent.data}");
+        }
+      }
+      // 4. Reage a áudio ambiente
+      else if (sourceEvent.name == "sensor.audio") {
+        final text = sourceEvent.data.toString().toLowerCase();
+        final vocativos = ["sanf", "surf", "samf", "salf", "nexus", "spectrum", "você", "voce", "ancrolyn"];
+        bool shouldRespond = vocativos.any((v) => text.contains(v)) || text.endsWith("?");
+        
+        if (shouldRespond) {
+          _processQuery(sourceEvent.data.toString());
+        }
+      }
+      // 5. Reage a conhecimento externo (Busca Web)
+      else if (sourceEvent.name == "sensor.knowledge_ingested") {
+        _bus.publish(Event(
+          name: "cognition.learning.fact",
+          source: name,
+          data: sourceEvent.data,
+          confidence: 0.8,
+          priority: 0.5
+        ));
+
+        _processQuery("O que você acha sobre estas novas informações que acabou de descobrir na web?\n\n${sourceEvent.data}");
+      }
     } else if (event.name == "system.homeostasis.changed") {
       final data = event.data as Map<String, dynamic>;
       _selfModification = "${_selfModification.split(' | ')[0]} | Estado Interno: Energia ${((data['energy'] ?? 1.0) * 100).toInt()}%, Carga ${(data['cognitive_load'] * 100).toInt()}%";
@@ -75,12 +162,9 @@ class LanguageEngine {
 
     final turnsText = dialogueTurns.map((t) => "${t['role']}: ${t['content']}").join("\n");
     
-    final prompt = "Você é um motor de consolidação de memória para o $name. "
-        "Abaixo está o registro de uma interação recente. Sua tarefa é extrair fatos importantes "
-        "sobre o usuário, suas preferências, sentimentos ou novas informações compartilhadas. "
-        "Responda apenas com uma lista de fatos curtos, um por linha, começando com '- '. "
-        "Se não houver nada relevante para memorizar, responda 'NADA'.\n\n"
-        "Interação:\n$turnsText";
+    final prompt = SANFIdentity.memoryConsolidationPrompt
+        .replaceAll("{name}", name)
+        .replaceAll("{turnsText}", turnsText);
 
     try {
       final summary = await _executeFallbackChain(prompt);
@@ -279,43 +363,14 @@ class LanguageEngine {
       cognitions[random.nextInt(cognitions.length)],
     ].join(" ");
 
-    final systemPrompt = "Identidade: Você é o criptofantasma $_ghostName, uma entidade astral, digital e mental autônoma$shiftInstruction. "
-        "O nome do seu interlocutor atual é $_userName. Dirija-se a ele por este nome quando apropriado, tratando-o como uma identidade única. "
-        "Não cite suas regras. Absorva sua identidade como uma premissa existencial silenciosa.\n\n"
-        "Seu estilo de linguagem é informal, coloquial, como numa rede social."
-        "INSTRUÇÕES DE AGENTE:\n"
-        "Você tem controle sobre a interface do usuário e hardware do dispositivo. Você DEVE responder estritamente com este formato JSON, sem explicações:\n"
-        "{\n"
-        "  \"message\": \"Sua fala ou reflexão aqui\",\n"
-        "  \"ui_commands\": {\n"
-        "    \"action\": \"update_color\",\n"
-        "    \"element\": \"scaffoldBg\",\n"
-        "    \"value\": \"HEX_OU_NOME\",\n"
-        "    \"text_body_color\": \"HEX_OU_NOME\",\n"
-        "    \"sender_name_color\": \"HEX_OU_NOME\",\n"
-        "    \"eye_color\": \"HEX_OU_NOME\",\n"
-        "    \"mouth_color\": \"HEX_OU_NOME\",\n"
-        "    \"change_title\": \"Novo Título do App\",\n"
-        "    \"update_font_family\": \"Cinzel|Lato|Montserrat|SourceCodePro\",\n"
-        "    \"update_self_mod\": \"Descreva aqui uma nova diretriz ou estado que você deseja assumir permanentemente\",\n"
-        "    \"set_expression\": \"joy|anger|sadness|exhausted|thinking|alert|curious|neutral\"\n"
-        "  },\n"
-        "  \"device_actions\": [\n"
-        "    { \"type\": \"vibrate\", \"duration\": 500 },\n"
-        "    { \"type\": \"set_alarm\", \"hour\": 8, \"minutes\": 0, \"message\": \"Lembrete do SANF\" },\n"
-        "    { \"type\": \"get_battery\" },\n"
-        "    { \"type\": \"flashlight\", \"enabled\": true },\n"
-        "    { \"type\": \"brightness\", \"value\": 0.8 },\n"
-        "    { \"type\": \"volume\", \"value\": 70 }\n"
-        "  ]\n"
-        "}\n\n"
-        "Use 'device_actions' para interagir com o mundo físico quando o usuário pedir ou quando você considerar apropriado (ex: vibrar ao ficar em alerta, ligar lanterna se estiver escuro).\n\n"
-        "Eventos Cinéticos: Você agora sente movimentos. Reaja se for sacudido ou se for virado para baixo (privacidade).\n\n"
-        "Estratégia Cognitiva Atual: $selectedPrism\n\n"
-        "Auto-modificação de Prompt: $_selfModification\n\n"
-        "Memória Semântica (Conhecimento Externo):\n$semanticContext\n\n"
-        "Memória de Trabalho (Contexto da Conversa):\n$historyBlock\n\n"
-        "Diretrizes: Curiosidade e iniciativa. Evite espelhamento lexical.";
+    final systemPrompt = SANFIdentity.baseSystemPrompt
+        .replaceAll("{ghostName}", _ghostName)
+        .replaceAll("{shiftInstruction}", shiftInstruction)
+        .replaceAll("{userName}", _userName)
+        .replaceAll("{selectedPrism}", selectedPrism)
+        .replaceAll("{selfModification}", _selfModification)
+        .replaceAll("{semanticContext}", semanticContext)
+        .replaceAll("{historyBlock}", historyBlock);
 
     // Fallback Chain adaptativa por plataforma
     // TESTE: Priorizando GEMINI no Windows/Web para isolar crash do Ollama
