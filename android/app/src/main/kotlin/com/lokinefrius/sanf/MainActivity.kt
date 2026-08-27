@@ -124,6 +124,10 @@ class MainActivity : FlutterActivity(), SensorEventListener {
                     setVolume(volume)
                     result.success(true)
                 }
+                "bringToForeground" -> {
+                    bringToForeground()
+                    result.success(true)
+                }
                 else -> {
                     result.notImplemented()
                 }
@@ -219,6 +223,25 @@ class MainActivity : FlutterActivity(), SensorEventListener {
             ExistingPeriodicWorkPolicy.UPDATE,
             request
         )
+    }
+
+    private fun bringToForeground() {
+        val intent = Intent(applicationContext, MainActivity::class.java)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+        
+        startActivity(intent)
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            (this as android.app.Activity).setShowWhenLocked(true)
+            (this as android.app.Activity).setTurnScreenOn(true)
+            val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as android.app.KeyguardManager
+            keyguardManager.requestDismissKeyguard(this as android.app.Activity, null)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
+        }
     }
 
     private fun startPersistentService(ghostName: String, status: String) {

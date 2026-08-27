@@ -289,15 +289,8 @@ class RobotState extends ChangeNotifier {
       }
     });
 
-    bus.subscribe("user.input.audio", (e) {
-      _handleAudioInput(e.data.toString());
-    });
-    
-    bus.subscribe("sensor.audio.status", (e) {
-      scheduleMicrotask(() {
-        isListening = e.data == 'listening';
-        notifyListeners();
-      });
+    bus.subscribe("system.wake_up", (e) {
+      _handleWakeUp(e.data.toString());
     });
 
     bus.subscribe("workspace.updated", (e) => languageEngine.handleEvent(e));
@@ -958,29 +951,27 @@ class RobotState extends ChangeNotifier {
     }
   }
 
-  Future<void> _handleAudioInput(String path) async {
+  Future<void> _handleWakeUp(String detectedText) async {
     try {
-      addMessage("Você", "🎙️ [Áudio Enviado]");
+      debugPrint("RobotState: Processando comando de despertar...");
       
-      // Simulação de envio para o backend (Multi-part)
-      debugPrint("RobotState: Enviando áudio $path para o servidor...");
-      
-      // Aqui entraria a lógica real de upload, ex:
-      // var request = http.MultipartRequest('POST', Uri.parse('https://api.sanf.com/audio'));
-      // request.files.add(await http.MultipartFile.fromPath('audio', path));
-      // var response = await request.send();
-      
-      await Future.delayed(const Duration(seconds: 1)); // Simula latência
-      debugPrint("RobotState: Áudio entregue com sucesso.");
+      // Força o app para o primeiro plano se estiver em background
+      await platform.invokeMethod('bringToForeground');
 
       bus.publish(Event(
-        name: "user.input",
-        source: "audio_controller",
-        data: "O usuário enviou um áudio. (Transcrição pendente no backend)",
-        priority: 0.9,
+        name: "ui.expression.changed",
+        source: "wake_system",
+        data: BotExpression.alert,
+        priority: 1.0,
       ));
+      _vibratePattern("alert");
+
+      // Inicia escuta ativa automaticamente
+      toggleListening();
+      
+      addMessage("SISTEMA", "SANF despertado via comando de voz.");
     } catch (e) {
-      debugPrint("RobotState Error handling audio input: $e");
+      debugPrint("RobotState WakeUp Error: $e");
     }
   }
 
