@@ -35,6 +35,7 @@ dependencies:
   http: ^1.2.1
   provider: ^6.1.2
   speech_to_text: ^7.3.0
+  record: ^5.1.0
   flutter_tts: ^4.2.2
   camera: ^0.11.1
   hive: ^2.2.3
@@ -91,8 +92,6 @@ flutter:
     - .env
     - assets/knowledge_seed/semantic_memory_store.hive
     - assets/knowledge_seed/knowledge_status.hive
-    - assets/
-    - assets/prints
   #   - images/a_dot_ham.jpeg
 
   # An image asset can refer to one or more resolution-specific "variants", see

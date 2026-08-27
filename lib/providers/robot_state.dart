@@ -27,7 +27,7 @@ import '../cognition/consolidation_engine.dart';
 import '../system/homeostasis.dart';
 import '../system/metrics.dart';
 import '../system/knowledge_importer.dart';
-import '../system/audio_sensor.dart';
+import '../system/audio_controller.dart';
 import '../system/curiosity_sensor.dart';
 import '../system/vision_sensor.dart';
 import '../system/environmental_sensor.dart';
@@ -94,7 +94,7 @@ class RobotState extends ChangeNotifier {
   late final Homeostasis homeostasis;
   late final Metrics metrics;
   late final KnowledgeImporter knowledgeImporter;
-  late final AudioSensor audioSensor;
+  late final AudioController audioController;
   late final CuriositySensor curiositySensor;
   late final VisionSensor visionSensor;
   late final EnvironmentalSensor environmentalSensor;
@@ -193,7 +193,7 @@ class RobotState extends ChangeNotifier {
     homeostasis = Homeostasis(bus);
     metrics = Metrics(bus);
     knowledgeImporter = KnowledgeImporter(bus);
-    audioSensor = AudioSensor(bus);
+    audioController = AudioController(bus);
     curiositySensor = CuriositySensor(bus);
     visionSensor = VisionSensor(bus);
     environmentalSensor = EnvironmentalSensor(bus);
@@ -220,7 +220,7 @@ class RobotState extends ChangeNotifier {
     _register(homeostasis);
     _register(metrics);
     _register(knowledgeImporter);
-    _register(audioSensor);
+    _register(audioController);
     _register(curiositySensor);
     _register(visionSensor);
     _register(environmentalSensor);
@@ -288,6 +288,10 @@ class RobotState extends ChangeNotifier {
         addMessage("Você", e.data.toString());
       }
     });
+
+    bus.subscribe("user.input.audio", (e) {
+      _handleAudioInput(e.data.toString());
+    });
     
     bus.subscribe("sensor.audio.status", (e) {
       scheduleMicrotask(() {
@@ -312,6 +316,23 @@ class RobotState extends ChangeNotifier {
     try {
       await tts.setLanguage("pt-BR");
       _setMaleVoice();
+
+      // SINCRONIA DE FALA (Mobile/Web): Garante que a boca pare exatamente com o áudio
+      tts.setCompletionHandler(() {
+        scheduleMicrotask(() {
+          isSpeaking = false;
+          bus.publish(Event(name: "cognition.speaking.stop", source: "robot_state"));
+          notifyListeners();
+        });
+      });
+
+      tts.setErrorHandler((msg) {
+        debugPrint("TTS Error: $msg");
+        scheduleMicrotask(() {
+          isSpeaking = false;
+          notifyListeners();
+        });
+      });
     } catch (e) {
       debugPrint("TTS Setup Error: $e");
     }
@@ -426,139 +447,190 @@ class RobotState extends ChangeNotifier {
     if (event.data is BotExpression) {
       expression = event.data;
       _applyExpressionStyle(expression);
-      notifyListeners();
+      // notifyListeners() já é chamado dentro de _applyExpressionStyle
     }
   }
 
   void _applyExpressionStyle(BotExpression exp) {
-    scheduleMicrotask(() {
-      switch (exp) {
-        case BotExpression.joy:
-        case BotExpression.happy:
-        case BotExpression.pleased:
-          ambientColor = const Color(0xFF001A0A);
-          eyeColor = Colors.greenAccent;
-          mouthColor = Colors.yellowAccent;
-          _ttsPitch = 1.1;
-          _ttsRate = 0.6;
-          break;
-        case BotExpression.angry:
-        case BotExpression.annoyed:
-          ambientColor = const Color(0xFF1A0000);
-          eyeColor = Colors.redAccent;
-          mouthColor = Colors.orangeAccent;
-          _ttsPitch = 0.7;
-          _ttsRate = 0.7;
-          break;
-        case BotExpression.sad:
-        case BotExpression.crying:
-        case BotExpression.frustrated:
-          ambientColor = const Color(0xFF000A1A);
-          eyeColor = Colors.blueAccent;
-          mouthColor = Colors.cyanAccent;
-          _ttsPitch = 0.6;
-          _ttsRate = 0.4;
-          break;
-        case BotExpression.exhausted:
-        case BotExpression.sleeping:
-          ambientColor = const Color(0xFF0A0A0A);
-          eyeColor = Colors.grey;
-          mouthColor = Colors.blueGrey;
-          _ttsPitch = 0.5;
-          _ttsRate = 0.3;
-          break;
-        case BotExpression.thinking:
-        case BotExpression.scanning:
-        case BotExpression.puzzledLeft:
-        case BotExpression.puzzledRight:
-          ambientColor = const Color(0xFF0A001A);
-          eyeColor = Colors.deepPurpleAccent;
-          mouthColor = Colors.cyanAccent;
-          _ttsPitch = 0.9;
-          _ttsRate = 0.5;
-          break;
-        case BotExpression.alert:
-        case BotExpression.suspicious:
-          ambientColor = const Color(0xFF1A1A00);
-          eyeColor = Colors.amberAccent;
-          mouthColor = Colors.redAccent;
-          _ttsPitch = 1.0;
-          _ttsRate = 0.6;
-          break;
-        case BotExpression.curious:
-          ambientColor = const Color(0xFF001A1A);
-          eyeColor = Colors.cyanAccent;
-          mouthColor = Colors.greenAccent;
-          _ttsPitch = 1.0;
-          _ttsRate = 0.5;
-          break;
-        default:
-          // Keep current or reset to neutral
-          break;
-      }
-      notifyListeners();
-    });
+    // REMOVIDO scheduleMicrotask: A mudança deve ser imediata para sincronizar com o áudio
+    switch (exp) {
+      case BotExpression.joy:
+      case BotExpression.happy:
+      case BotExpression.pleased:
+      case BotExpression.blushing:
+        ambientColor = const Color(0xFF001A0A);
+        eyeColor = Colors.greenAccent;
+        mouthColor = Colors.yellowAccent;
+        _ttsPitch = 1.1;
+        _ttsRate = 0.6;
+        break;
+      case BotExpression.inLove:
+        ambientColor = const Color(0xFF1A000A);
+        eyeColor = Colors.pinkAccent;
+        mouthColor = Colors.redAccent;
+        _ttsPitch = 1.2;
+        _ttsRate = 0.5;
+        break;
+      case BotExpression.excited:
+        ambientColor = const Color(0xFF1A1A00);
+        eyeColor = Colors.yellowAccent;
+        mouthColor = Colors.white;
+        _ttsPitch = 1.3;
+        _ttsRate = 0.7;
+        break;
+      case BotExpression.angry:
+      case BotExpression.annoyed:
+      case BotExpression.frustrated:
+        ambientColor = const Color(0xFF1A0000);
+        eyeColor = Colors.redAccent;
+        mouthColor = Colors.orangeAccent;
+        _ttsPitch = 0.7;
+        _ttsRate = 0.7;
+        break;
+      case BotExpression.sad:
+      case BotExpression.crying:
+        ambientColor = const Color(0xFF000A1A);
+        eyeColor = Colors.blueAccent;
+        mouthColor = Colors.cyanAccent;
+        _ttsPitch = 0.6;
+        _ttsRate = 0.4;
+        break;
+      case BotExpression.exhausted:
+      case BotExpression.sleeping:
+      case BotExpression.neutralClosed:
+        ambientColor = const Color(0xFF0A0A0A);
+        eyeColor = Colors.grey;
+        mouthColor = Colors.blueGrey;
+        _ttsPitch = 0.5;
+        _ttsRate = 0.3;
+        break;
+      case BotExpression.thinking:
+      case BotExpression.scanning:
+      case BotExpression.puzzledLeft:
+      case BotExpression.puzzledRight:
+      case BotExpression.lookingDown:
+      case BotExpression.lookingUp:
+        ambientColor = const Color(0xFF0A001A);
+        eyeColor = Colors.deepPurpleAccent;
+        mouthColor = Colors.cyanAccent;
+        _ttsPitch = 0.9;
+        _ttsRate = 0.5;
+        break;
+      case BotExpression.dizzy:
+      case BotExpression.hypnotized:
+        ambientColor = const Color(0xFF0A1A0A);
+        eyeColor = Colors.purpleAccent;
+        mouthColor = Colors.limeAccent;
+        _ttsPitch = 0.8;
+        _ttsRate = 0.4;
+        break;
+      case BotExpression.greedy:
+        ambientColor = const Color(0xFF1A1400);
+        eyeColor = Colors.amberAccent;
+        mouthColor = Colors.yellow;
+        _ttsPitch = 1.0;
+        _ttsRate = 0.6;
+        break;
+      case BotExpression.alert:
+      case BotExpression.suspicious:
+      case BotExpression.sweating:
+        ambientColor = const Color(0xFF1A1A00);
+        eyeColor = Colors.amberAccent;
+        mouthColor = Colors.redAccent;
+        _ttsPitch = 1.0;
+        _ttsRate = 0.6;
+        break;
+      case BotExpression.curious:
+      case BotExpression.winking:
+        ambientColor = const Color(0xFF001A1A);
+        eyeColor = Colors.cyanAccent;
+        mouthColor = Colors.greenAccent;
+        _ttsPitch = 1.0;
+        _ttsRate = 0.5;
+        break;
+      case BotExpression.masked:
+        ambientColor = const Color(0xFF00050A);
+        eyeColor = Colors.blueGrey;
+        mouthColor = Colors.cyanAccent;
+        _ttsPitch = 0.8;
+        _ttsRate = 0.5;
+        break;
+      case BotExpression.idle:
+      default:
+        ambientColor = const Color(0xFF00050A);
+        eyeColor = Colors.cyanAccent;
+        mouthColor = Colors.yellowAccent;
+        _ttsPitch = 0.8;
+        _ttsRate = 0.5;
+        break;
+    }
+    notifyListeners();
   }
 
   void _onUiCommandReceived(Event event) {
     final commands = event.data as Map<String, dynamic>;
     
-    scheduleMicrotask(() {
-      // 1. Mudança de Cor de Fundo
-      if (commands['action'] == 'update_color' && commands['element'] == 'scaffoldBg') {
-        ambientColor = _parseColor(commands['value']);
-      }
+    // 1. Mudança de Cor de Fundo
+    if (commands['action'] == 'update_color' && commands['element'] == 'scaffoldBg') {
+      ambientColor = _parseColor(commands['value']);
+    }
 
-      // 2. Mudança de Título
-      if (commands['action'] == 'change_title') {
-        appBarTitle = commands['value'];
-      }
+    // 2. Mudança de Título
+    if (commands['action'] == 'change_title') {
+      appBarTitle = commands['value'];
+    }
 
-      // 3. Mudança de Fonte
-      if (commands['action'] == 'update_font_family') {
-        fontFamily = commands['value'];
-      }
+    // 3. Mudança de Fonte
+    if (commands['action'] == 'update_font_family') {
+      fontFamily = commands['value'];
+    }
 
-      // 4. Cores de Texto Dinâmicas
-      if (commands.containsKey('text_body_color')) {
-        textBodyColor = _parseColor(commands['text_body_color']);
-      }
-      if (commands.containsKey('sender_name_color')) {
-        senderNameColor = _parseColor(commands['sender_name_color']);
-      }
-      if (commands.containsKey('eye_color')) {
-        eyeColor = _parseColor(commands['eye_color']);
-      }
-      if (commands.containsKey('mouth_color')) {
-        mouthColor = _parseColor(commands['mouth_color']);
-      }
+    // 4. Cores de Texto Dinâmicas
+    if (commands.containsKey('text_body_color')) {
+      textBodyColor = _parseColor(commands['text_body_color']);
+    }
+    if (commands.containsKey('sender_name_color')) {
+      senderNameColor = _parseColor(commands['sender_name_color']);
+    }
+    if (commands.containsKey('eye_color')) {
+      eyeColor = _parseColor(commands['eye_color']);
+    }
+    if (commands.containsKey('mouth_color')) {
+      mouthColor = _parseColor(commands['mouth_color']);
+    }
 
-      // 5. Mudança de Expressão Manual (IA)
-      if (commands.containsKey('set_expression')) {
-        final expStr = commands['set_expression'].toString().toLowerCase();
-        BotExpression? newExp;
-        switch (expStr) {
-          case 'joy': newExp = BotExpression.joy; break;
-          case 'anger': newExp = BotExpression.angry; break;
-          case 'sadness': newExp = BotExpression.sad; break;
-          case 'exhausted': newExp = BotExpression.exhausted; break;
-          case 'thinking': newExp = BotExpression.thinking; break;
-          case 'alert': newExp = BotExpression.alert; break;
-          case 'curious': newExp = BotExpression.curious; break;
-          case 'neutral': newExp = BotExpression.idle; break;
-        }
-        if (newExp != null) {
-          bus.publish(Event(
-            name: "ui.expression.changed",
-            source: "agent_command",
-            data: newExp,
-            priority: 0.9,
-          ));
-        }
+    // 5. Mudança de Expressão Manual (IA)
+    if (commands.containsKey('set_expression')) {
+      final expStr = commands['set_expression'].toString().toLowerCase();
+      BotExpression? newExp;
+      switch (expStr) {
+        case 'joy': newExp = BotExpression.joy; break;
+        case 'happy': newExp = BotExpression.happy; break;
+        case 'love': newExp = BotExpression.inLove; break;
+        case 'excited': newExp = BotExpression.excited; break;
+        case 'anger': newExp = BotExpression.angry; break;
+        case 'annoyed': newExp = BotExpression.annoyed; break;
+        case 'sadness': newExp = BotExpression.sad; break;
+        case 'crying': newExp = BotExpression.crying; break;
+        case 'exhausted': newExp = BotExpression.exhausted; break;
+        case 'thinking': newExp = BotExpression.thinking; break;
+        case 'dizzy': newExp = BotExpression.dizzy; break;
+        case 'alert': newExp = BotExpression.alert; break;
+        case 'curious': newExp = BotExpression.curious; break;
+        case 'scanning': newExp = BotExpression.scanning; break;
+        case 'neutral': newExp = BotExpression.idle; break;
       }
-      
-      notifyListeners();
-    });
+      if (newExp != null) {
+        bus.publish(Event(
+          name: "ui.expression.changed",
+          source: "agent_command",
+          data: newExp,
+          priority: 0.9,
+        ));
+      }
+    }
+    
+    notifyListeners();
   }
 
   void _onDeviceActionReceived(Event event) async {
@@ -726,48 +798,29 @@ class RobotState extends ChangeNotifier {
     bus.publish(Event(name: "cognition.speaking.start", source: "robot_state"));
     notifyListeners();
 
-    // Filtra asteriscos para o TTS não ler "asterisco" ou pausar estranhamente
-    final cleanText = text.replaceAll('*', '');
+    // Filtra caracteres que o TTS não deve ler ou que causam pausas estranhas
+    final cleanText = text.replaceAll('*', '').replaceAll('`', '');
 
     // Pequeno delay de "respiro" para o Windows processar o rebuild da UI antes do I/O de áudio
     await Future.delayed(const Duration(milliseconds: 200));
 
-    // AGENDAMENTO DE EXPRESSÕES (Fallback para quando o handler nativo falha)
-    // AVISO: No Windows, timers de sincronia durante o TTS podem causar instabilidade fatal
+    // AGENDAMENTO DE EXPRESSÕES (Reativado para Web)
     try {
-      if (!kIsWeb && !Platform.isWindows) {
+      if (!Platform.isWindows) {
         _scheduleExpressions(cleanText);
-      } else {
-        debugPrint("TTS Sync: Agendamento interno desativado ou rodando na Web/Windows.");
       }
     } catch (e) {
       debugPrint("Erro ao agendar expressões: $e");
     }
 
-    if (!kIsWeb && Platform.isWindows) {
-      debugPrint("TTS: Iniciando fala em modo isolado...");
-    }
-
     try {
-      // Limpeza de buffer e remoção de handlers perigosos no Windows
-      // AVISO: Não sete handlers (mesmo vazios) no Windows para evitar erro de threading nativo
-      if (!kIsWeb && Platform.isWindows) {
-        await tts.stop(); 
-      }
-      
       await tts.setPitch(_ttsPitch);
       await tts.setSpeechRate(_ttsRate);
       await tts.speak(cleanText);
       
-      // Timer interno para animação (evita usar canal nativo de conclusão que crasha o Windows)
-      int estimatedDuration = (cleanText.length * 75).clamp(2000, 15000);
-      Timer(Duration(milliseconds: estimatedDuration), () {
-        isSpeaking = false;
-        bus.publish(Event(name: "cognition.speaking.stop", source: "robot_state"));
-        notifyListeners();
-      });
+      // Nota: A finalização da boca agora é controlada pelo completionHandler nativo
     } catch (e) {
-      debugPrint("Erro silenciado no TTS Windows: $e");
+      debugPrint("Erro no TTS: $e");
       isSpeaking = false;
       notifyListeners();
     }
@@ -779,7 +832,7 @@ class RobotState extends ChangeNotifier {
     int scheduledCount = 0;
 
     for (var word in words) {
-      if (kIsWeb || (!Platform.isWindows && scheduledCount > 15)) break; // Limite de 15 expressões por frase para evitar crash de Timers
+      if (scheduledCount > 20) break; // Limite de segurança aumentado para Mobile/Web
       
       final cleanWord = word.replaceAll(RegExp(r'[^\w\s]'), '');
       final expression = ExpressionMapper.getExpressionForWord(cleanWord);
@@ -902,6 +955,32 @@ class RobotState extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint("Vibration pattern error: $e");
+    }
+  }
+
+  Future<void> _handleAudioInput(String path) async {
+    try {
+      addMessage("Você", "🎙️ [Áudio Enviado]");
+      
+      // Simulação de envio para o backend (Multi-part)
+      debugPrint("RobotState: Enviando áudio $path para o servidor...");
+      
+      // Aqui entraria a lógica real de upload, ex:
+      // var request = http.MultipartRequest('POST', Uri.parse('https://api.sanf.com/audio'));
+      // request.files.add(await http.MultipartFile.fromPath('audio', path));
+      // var response = await request.send();
+      
+      await Future.delayed(const Duration(seconds: 1)); // Simula latência
+      debugPrint("RobotState: Áudio entregue com sucesso.");
+
+      bus.publish(Event(
+        name: "user.input",
+        source: "audio_controller",
+        data: "O usuário enviou um áudio. (Transcrição pendente no backend)",
+        priority: 0.9,
+      ));
+    } catch (e) {
+      debugPrint("RobotState Error handling audio input: $e");
     }
   }
 
