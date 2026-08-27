@@ -107,3 +107,6 @@ flutter build apk --release --android-skip-build-dependency-validation `
 ---
 
 **SANF** — Mais que uma IA, uma presença.
+
+---
+Versão Web: https://sanf-casulo.web.app
