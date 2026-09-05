@@ -781,7 +781,7 @@ class RobotState extends ChangeNotifier {
 
   void _onCognitionResponse(Event event) async {
     final text = event.data.toString();
-    if (text.startsWith("[Atenção]") || text.startsWith("[Estado]")) {
+    if (text.startsWith("[Atenção]") || text.startsWith("[Estado]") || text.startsWith("[Comando]")) {
       addMessage("SISTEMA", text);
       return;
     }

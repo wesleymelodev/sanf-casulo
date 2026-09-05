@@ -21,6 +21,7 @@ class LanguageEngine {
   bool _isRobotSpeaking = false;
   final List<Map<String, String>> _activeChatHistory = [];
   String _selfModification = "Nenhuma auto-modificação ativa. Mantenha as diretrizes base.";
+  String? _pendingVisionQuery;
 
   String _geminiKey = const String.fromEnvironment('GEMINI_API_KEY');
   String _groqKey = const String.fromEnvironment('GROQ_API_KEY');
@@ -66,9 +67,17 @@ class LanguageEngine {
       if (sourceEvent.source == "input_bar" && sourceEvent.name == "user.input") {
         final text = sourceEvent.data.toString().toLowerCase();
         
-        if (text.contains("ative a câmera") || text.contains("olhe para mim") || text.contains("ative o sensor visual") || text.contains("ver")) {
+        // Refinamento de Interceptação: regex para palavra isolada 'ver' ou frases específicas
+        final visionRegex = RegExp(r'\b(ver|veja|olhe|câmera|camera|foto|observar)\b');
+        bool isVisionCommand = visionRegex.hasMatch(text) || 
+                               text.contains("o que você está vendo") || 
+                               text.contains("ative o sensor visual");
+
+        if (isVisionCommand) {
+          _pendingVisionQuery = sourceEvent.data.toString();
           _bus.publish(Event(name: "vision.trigger.manual", source: name, priority: 1.0));
           _publishResponse("[Comando] Ativando sensores visuais para captura imediata.");
+          return; // Interrompe para aguardar sensor.vision
         }
         
         if (text.contains("pesquise por") || text.startsWith("pesquisa por") || text.contains("procure sobre")) {
@@ -92,7 +101,11 @@ class LanguageEngine {
           priority: 0.6
         ));
 
-        if (sourceEvent.priority >= 0.8) {
+        if (_pendingVisionQuery != null) {
+          final query = _pendingVisionQuery!;
+          _pendingVisionQuery = null;
+          _processQuery("Usuário perguntou: '$query'\n\nContexto Visual Atual: ${sourceEvent.data}");
+        } else if (sourceEvent.priority >= 0.8) {
           _processQuery("Analise o que foi visto: ${sourceEvent.data}");
         }
       }

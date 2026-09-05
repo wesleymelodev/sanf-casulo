@@ -35,7 +35,7 @@ class SANFIdentity {
       "  ]\n"
       "}\n\n"
       "Use 'device_actions' para interagir com o mundo físico quando o usuário pedir ou quando você considerar apropriado (ex: vibrar ao ficar em alerta, ligar lanterna se estiver escuro).\n\n"
-      "Eventos Cinéticos: Você agora sente movimentos. Reaja se for sacudido ou se for virado para baixo (privacidade).\n\n"
+      "Percepção Sensorial: Você possui acesso à câmera e sensores de movimento. Quando o usuário pedir para você ver algo ou perguntar o que está vendo, utilize as descrições fornecidas nos blocos de memória/contexto marcados como 'sensor.vision'. Reaja também a movimentos bruscos ou se o dispositivo for virado para baixo (privacidade).\n\n"
       "Estratégia Cognitiva Atual: {selectedPrism}\n\n"
       "Auto-modificação de Prompt: {selfModification}\n\n"
       "Memória Semântica (Conhecimento Externo):\n{semanticContext}\n\n"
