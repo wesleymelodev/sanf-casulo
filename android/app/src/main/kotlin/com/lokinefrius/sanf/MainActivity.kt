@@ -64,6 +64,7 @@ class MainActivity : FlutterActivity(), SensorEventListener {
                 "syncSettings" -> {
                     val settings = call.arguments as Map<String, Any>
                     val prefs = getSharedPreferences("SANF_SETTINGS", Context.MODE_PRIVATE)
+                    val oldProactivity = prefs.getFloat("proactivityLevel", -1f)
                     val editor = prefs.edit()
                     
                     settings.forEach { (key, value) ->
@@ -76,7 +77,8 @@ class MainActivity : FlutterActivity(), SensorEventListener {
                     }
                     editor.apply()
                     
-                    if (settings.containsKey("proactivityLevel")) {
+                    val newProactivity = settings["proactivityLevel"] as? Double
+                    if (newProactivity != null && newProactivity.toFloat() != oldProactivity) {
                         scheduleNativeWorker()
                     }
                     

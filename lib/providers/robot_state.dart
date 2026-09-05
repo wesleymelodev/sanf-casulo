@@ -874,7 +874,6 @@ class RobotState extends ChangeNotifier {
     else if (modeStr == 'protective') homeostaticMode = "Protetor";
     else if (modeStr == 'restorative') homeostaticMode = "Regenerativo";
     
-    _syncSettingsToNative();
     notifyListeners();
   }
 

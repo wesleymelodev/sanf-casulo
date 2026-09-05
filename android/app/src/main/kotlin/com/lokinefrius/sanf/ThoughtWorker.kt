@@ -17,7 +17,6 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
-import java.util.Random
 
 class ThoughtWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
@@ -42,10 +41,17 @@ class ThoughtWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             try {
                 val json = JSONObject().apply {
                     put("model", "openai/gpt-oss-120b")
-                    put("messages", JSONArray().put(JSONObject().apply {
-                        put("role", "system")
-                        put("content", prompt)
-                    }))
+                    val messages = JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("role", "system")
+                            put("content", prompt)
+                        })
+                        put(JSONObject().apply {
+                            put("role", "user")
+                            put("content", "Gere a reflexão agora.")
+                        })
+                    }
+                    put("messages", messages)
                     put("temperature", 0.8)
                     put("max_tokens", 100)
                 }
@@ -140,6 +146,6 @@ class ThoughtWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             .setAutoCancel(true)
             .build()
 
-        notificationManager.notify(Random().nextInt(1000), notification)
+        notificationManager.notify(2000, notification)
     }
 }
