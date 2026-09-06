@@ -22,6 +22,7 @@ class LanguageEngine {
   final List<Map<String, String>> _activeChatHistory = [];
   String _selfModification = "Nenhuma auto-modificação ativa. Mantenha as diretrizes base.";
   String? _pendingVisionQuery;
+  String _lastVisionDescription = "Nenhum dado visual capturado recentemente.";
 
   String _geminiKey = const String.fromEnvironment('GEMINI_API_KEY');
   String _groqKey = const String.fromEnvironment('GROQ_API_KEY');
@@ -63,12 +64,12 @@ class LanguageEngine {
         return;
       }
 
-      // 1. Reage a inputs diretos do InputBar
-      if (sourceEvent.source == "input_bar" && sourceEvent.name == "user.input") {
+      // 1. Reage a inputs de usuário (Texto ou Voz)
+      if (sourceEvent.name == "user.input") {
         final text = sourceEvent.data.toString().toLowerCase();
         
-        // Refinamento de Interceptação: regex para palavra isolada 'ver' ou frases específicas
-        final visionRegex = RegExp(r'\b(ver|veja|olhe|câmera|camera|foto|observar)\b');
+        // Refinamento de Interceptação: regex expandida para variações de visão
+        final visionRegex = RegExp(r'\b(vê|vendo|viu|ver|veja|olhe|olha|câmera|camera|foto|observar|observando)\b');
         bool isVisionCommand = visionRegex.hasMatch(text) || 
                                text.contains("o que você está vendo") || 
                                text.contains("ative o sensor visual");
@@ -77,7 +78,7 @@ class LanguageEngine {
           _pendingVisionQuery = sourceEvent.data.toString();
           _bus.publish(Event(name: "vision.trigger.manual", source: name, priority: 1.0));
           _publishResponse("[Comando] Ativando sensores visuais para captura imediata.");
-          return; // Interrompe para aguardar sensor.vision
+          return; 
         }
         
         if (text.contains("pesquise por") || text.startsWith("pesquisa por") || text.contains("procure sobre")) {
@@ -93,10 +94,12 @@ class LanguageEngine {
       } 
       // 2. Reage a sinais de visão
       else if (sourceEvent.name == "sensor.vision") {
+        _lastVisionDescription = sourceEvent.data.toString();
+        
         _bus.publish(Event(
           name: "cognition.learning.fact",
           source: name,
-          data: "Observado visualmente: ${sourceEvent.data}",
+          data: "Observado visualmente: $_lastVisionDescription",
           confidence: 0.9,
           priority: 0.6
         ));
@@ -104,9 +107,9 @@ class LanguageEngine {
         if (_pendingVisionQuery != null) {
           final query = _pendingVisionQuery!;
           _pendingVisionQuery = null;
-          _processQuery("Usuário perguntou: '$query'\n\nContexto Visual Atual: ${sourceEvent.data}");
+          _processQuery(query); // Agora a visão está injetada no system prompt
         } else if (sourceEvent.priority >= 0.8) {
-          _processQuery("Analise o que foi visto: ${sourceEvent.data}");
+          _processQuery("Analise o que foi visto: $_lastVisionDescription");
         }
       }
       // 3. Reage a percepções ambientais (Luz/Proximidade/Movimento)
@@ -394,6 +397,7 @@ class LanguageEngine {
         .replaceAll("{greetingStrategy}", greetingStrategy)
         .replaceAll("{selectedPrism}", selectedPrism)
         .replaceAll("{selfModification}", _selfModification)
+        .replaceAll("{sensorialContext}", _lastVisionDescription)
         .replaceAll("{semanticContext}", semanticContext)
         .replaceAll("{historyBlock}", historyBlock);
 
