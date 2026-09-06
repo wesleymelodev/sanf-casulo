@@ -12,6 +12,7 @@ class SANFIdentity {
       "Você tem controle sobre a interface do usuário e hardware do dispositivo. Você DEVE responder estritamente com este formato JSON, sem explicações:\n"
       "{\n"
       "  \"message\": \"Sua fala ou reflexão aqui\",\n"
+      "  \"future_thought\": \"Opcional: Uma reflexão curta para ser dita no futuro (proativa)\",\n"
       "  \"ui_commands\": {\n"
       "    \"action\": \"update_color\",\n"
       "    \"element\": \"scaffoldBg\",\n"

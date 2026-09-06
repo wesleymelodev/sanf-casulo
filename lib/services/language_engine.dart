@@ -567,6 +567,7 @@ class LanguageEngine {
     String cleanMessage = rawText;
     Map<String, dynamic>? uiCommands;
     List<dynamic>? deviceActions;
+    String? futureThought;
 
     // Tenta extrair JSON se a resposta parecer um objeto
     if (rawText.trim().startsWith('{')) {
@@ -575,6 +576,7 @@ class LanguageEngine {
         cleanMessage = data['message'] ?? rawText;
         uiCommands = data['ui_commands'];
         deviceActions = data['device_actions'];
+        futureThought = data['future_thought'];
       } catch (e) {
         debugPrint("Erro ao parsear JSON do agente: $e");
       }
@@ -589,6 +591,15 @@ class LanguageEngine {
       data: cleanResponse,
       priority: 0.5,
     ));
+
+    if (futureThought != null && futureThought.trim().isNotEmpty) {
+      _bus.publish(Event(
+        name: "cognition.future_thought",
+        source: name,
+        data: futureThought.trim(),
+        priority: 0.3,
+      ));
+    }
 
     if (uiCommands != null) {
       if (uiCommands.containsKey("update_self_mod")) {

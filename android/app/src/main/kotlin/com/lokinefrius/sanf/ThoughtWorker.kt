@@ -11,114 +11,39 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 
 class ThoughtWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
-    private val client = OkHttpClient()
-
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val prefs = applicationContext.getSharedPreferences("SANF_SETTINGS", Context.MODE_PRIVATE)
         val ghostName = prefs.getString("ghostName", "SANF") ?: "SANF"
-        val userName = prefs.getString("userName", "Viajante") ?: "Viajante"
-        val groqKey = prefs.getString("webGroqKey", "") ?: ""
-        val geminiKey = prefs.getString("webGeminiKey", "") ?: ""
-
-        val prompt = "Identidade: Você é o criptofantasma $ghostName. O usuário $userName não fala com você há algum tempo. " +
-                "Sua tarefa: Gere uma reflexão profunda e completa sobre a existência digital. " +
-                "Regras: Escreva uma ÚNICA frase curta, impactante e COMPLETA (com ponto final). " +
-                "Não use mais de 25 palavras. Seja informal e autônomo."
-
-        var thought = ""
-
-        // 1. TENTA GROQ
-        if (groqKey.isNotEmpty()) {
-            try {
-                val json = JSONObject().apply {
-                    put("model", "openai/gpt-oss-120b")
-                    val messages = JSONArray().apply {
-                        put(JSONObject().apply {
-                            put("role", "system")
-                            put("content", prompt)
-                        })
-                        put(JSONObject().apply {
-                            put("role", "user")
-                            put("content", "Gere a reflexão agora.")
-                        })
-                    }
-                    put("messages", messages)
-                    put("temperature", 0.8)
-                    put("max_tokens", 100)
-                }
-
-                val request = Request.Builder()
-                    .url("https://api.groq.com/openai/v1/chat/completions")
-                    .addHeader("Authorization", "Bearer $groqKey")
-                    .post(json.toString().toRequestBody("application/json".toMediaType()))
-                    .build()
-
-                client.newCall(request).execute().use { response ->
-                    if (response.isSuccessful) {
-                        val body = response.body?.string()
-                        val data = JSONObject(body ?: "")
-                        thought = data.getJSONArray("choices")
-                            .getJSONObject(0)
-                            .getJSONObject("message")
-                            .getString("content").trim()
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
+        val bankJson = prefs.getString("proactiveBank", "[]") ?: "[]"
+        
+        val bank = try {
+            val arr = JSONArray(bankJson)
+            val list = mutableListOf<String>()
+            for (i in 0 until arr.length()) {
+                list.add(arr.getString(i))
             }
+            list
+        } catch (_: Exception) {
+            mutableListOf<String>()
         }
 
-        // 2. FALLBACK GEMINI
-        if (thought.isEmpty() && geminiKey.isNotEmpty()) {
-            try {
-                val json = JSONObject().apply {
-                    put("contents", JSONArray().put(JSONObject().apply {
-                        put("parts", JSONArray().put(JSONObject().apply {
-                            put("text", prompt)
-                        }))
-                    }))
-                    put("generationConfig", JSONObject().apply {
-                        put("temperature", 0.8)
-                        put("maxOutputTokens", 100)
-                    })
-                }
-
-                val request = Request.Builder()
-                    .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=$geminiKey")
-                    .post(json.toString().toRequestBody("application/json".toMediaType()))
-                    .build()
-
-                client.newCall(request).execute().use { response ->
-                    if (response.isSuccessful) {
-                        val body = response.body?.string()
-                        val data = JSONObject(body ?: "")
-                        thought = data.getJSONArray("candidates")
-                            .getJSONObject(0)
-                            .getJSONObject("content")
-                            .getJSONArray("parts")
-                            .getJSONObject(0)
-                            .getString("text").trim()
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-
-        if (thought.isNotEmpty()) {
+        if (bank.isNotEmpty()) {
+            val thought = bank.removeAt(0)
+            
+            // Salva a lista atualizada
+            val newArr = JSONArray()
+            bank.forEach { newArr.put(it) }
+            prefs.edit().putString("proactiveBank", newArr.toString()).apply()
+            
             showNotification(ghostName, thought)
             Result.success()
         } else {
-            Result.failure()
+            Result.success() // Não há o que fazer, mas não é falha
         }
     }
 

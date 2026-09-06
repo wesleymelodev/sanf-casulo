@@ -91,6 +91,11 @@ class MainActivity : FlutterActivity(), SensorEventListener {
                     
                     result.success(true)
                 }
+                "getSettings" -> {
+                    val prefs = getSharedPreferences("SANF_SETTINGS", Context.MODE_PRIVATE)
+                    val allPrefs = prefs.all
+                    result.success(allPrefs)
+                }
                 "scheduleWorker" -> {
                     scheduleNativeWorker()
                     result.success(true)

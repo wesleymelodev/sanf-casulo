@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -53,6 +54,7 @@ class RobotState extends ChangeNotifier {
   String userName = "Viajante";
   String ghostName = "SANF (Spectrum Ancrolyn Nexus Fractal)";
   String selfModification = "Nenhuma auto-modificação ativa. Mantenha as diretrizes base.";
+  List<String> proactiveBank = [];
 
   // --- Emotional System Parameters ---
   double _ttsPitch = 0.8;
@@ -121,6 +123,7 @@ class RobotState extends ChangeNotifier {
         'cognitiveLoad': cognitiveLoad,
         'homeostaticMode': homeostaticMode,
         'proactivityLevel': proactivityLevel,
+        'proactiveBank': jsonEncode(proactiveBank),
         'eyeColor': '#${eyeColor.value.toRadixString(16).substring(2).toUpperCase()}',
       });
     } catch (e) {
@@ -149,6 +152,26 @@ class RobotState extends ChangeNotifier {
     final List<dynamic>? savedHistory = settingsBox.get('activeSessionHistory');
     if (savedHistory != null) {
       activeSessionHistory = savedHistory.map((m) => Map<String, String>.from(m as Map)).toList();
+    }
+    
+    final List<dynamic>? savedBank = settingsBox.get('proactiveBank');
+    if (savedBank != null) {
+      proactiveBank = List<String>.from(savedBank);
+    }
+
+    // Sync from native to see if some thoughts were consumed
+    if (!kIsWeb && Platform.isAndroid) {
+      try {
+        final Map<dynamic, dynamic>? nativeSettings = await platform.invokeMethod('getSettings');
+        if (nativeSettings != null && nativeSettings.containsKey('proactiveBank')) {
+          final String bankJson = nativeSettings['proactiveBank'];
+          final List<dynamic> nativeList = jsonDecode(bankJson);
+          proactiveBank = List<String>.from(nativeList);
+          await settingsBox.put('proactiveBank', proactiveBank);
+        }
+      } catch (e) {
+        debugPrint("Error syncing bank from native: $e");
+      }
     }
 
     // Request permissions for Android
@@ -299,6 +322,17 @@ class RobotState extends ChangeNotifier {
     bus.subscribe("system.config.history_updated", (e) {
       activeSessionHistory = List<Map<String, String>>.from((e.data as List).map((m) => Map<String, String>.from(m as Map)));
       Hive.box('settings').put('activeSessionHistory', activeSessionHistory);
+    });
+
+    bus.subscribe("cognition.future_thought", (e) {
+      final thought = e.data.toString();
+      if (!proactiveBank.contains(thought)) {
+        proactiveBank.add(thought);
+        if (proactiveBank.length > 10) proactiveBank.removeAt(0);
+        Hive.box('settings').put('proactiveBank', proactiveBank);
+        _syncSettingsToNative();
+        notifyListeners();
+      }
     });
 
     // SETUP ASSÍNCRONO (Não bloqueia o Kernel)
