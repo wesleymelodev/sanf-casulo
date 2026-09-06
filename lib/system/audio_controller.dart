@@ -21,7 +21,8 @@ class AudioController extends LifecycleComponent {
   
   Timer? _silenceTimer;
   static const Duration silenceThreshold = Duration(seconds: 10);
-  String _accumulatedText = ""; 
+  String _activeSessionText = ""; 
+  String _previousSessionsText = ""; 
 
   AudioController(this._bus);
 
@@ -132,10 +133,11 @@ class AudioController extends LifecycleComponent {
 
     _isActiveActive = true;
     _isPassiveActive = false;
-    _accumulatedText = "";
+    _activeSessionText = "";
+    _previousSessionsText = "";
 
     await _stt.stop();
-    debugPrint("AudioController: Iniciando escuta ativa (10s de tolerância)...");
+    debugPrint("AudioController: Iniciando escuta ativa (Continuidades permitidas)...");
     
     _bus.publish(Event(name: "ui.audio.recording.start", source: name));
     _listenActive();
@@ -147,7 +149,11 @@ class AudioController extends LifecycleComponent {
     try {
       await _stt.listen(
         onResult: (result) {
-          _accumulatedText = result.recognizedWords;
+          _activeSessionText = result.recognizedWords;
+          if (result.finalResult) {
+            _previousSessionsText += " ${_activeSessionText}";
+            _activeSessionText = "";
+          }
           // Reseta o timer de silêncio a cada nova palavra detectada
           _resetSilenceTimer();
         },
@@ -190,12 +196,13 @@ class AudioController extends LifecycleComponent {
 
     _bus.publish(Event(name: "ui.audio.recording.stop", source: name));
 
-    if (_accumulatedText.isNotEmpty) {
-      debugPrint("AudioController: Comando capturado: $_accumulatedText");
+    final fullText = ("$_previousSessionsText $_activeSessionText").trim();
+    if (fullText.isNotEmpty) {
+      debugPrint("AudioController: Comando completo capturado: $fullText");
       _bus.publish(Event(
         name: "user.input",
         source: "audio_controller_active",
-        data: _accumulatedText,
+        data: fullText,
         priority: 0.9,
         metadata: {"from_audio": true},
       ));
