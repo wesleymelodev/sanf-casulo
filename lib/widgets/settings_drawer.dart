@@ -155,6 +155,31 @@ class SettingsDrawer extends StatelessWidget {
                       style: TextStyle(color: Colors.white38, fontSize: 11),
                     ),
 
+                    const SizedBox(height: 30),
+                    
+                    // --- RESUMO DO USUÁRIO ---
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          state.requestUserSummary();
+                          Navigator.pop(context);
+                        },
+                        icon: const Icon(Icons.auto_awesome, color: Colors.black),
+                        label: const Text("O QUE VOCÊ SABE SOBRE MIM?", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.cyanAccent,
+                          padding: const EdgeInsets.symmetric(vertical: 15),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      "O SANF irá analisar tudo o que aprendeu sobre você até agora e gerar um perfil.",
+                      style: TextStyle(color: Colors.white38, fontSize: 11),
+                    ),
+
                     const Divider(height: 50, color: Colors.white10),
                     const Text(
                       "CHAVES DE API (WEB/CUSTOM)",

@@ -79,6 +79,7 @@ class VisionSensor extends LifecycleComponent {
   Future<void> _captureAndAnalyze() async {
     if (_isCapturing || _objectDetector == null) return;
     _isCapturing = true;
+    _bus.publish(Event(name: "cognition.thinking.start", source: name));
 
     CameraController? controller;
 
@@ -106,6 +107,7 @@ class VisionSensor extends LifecycleComponent {
     } finally {
       _isCapturing = false;
       if (controller != null) await controller.dispose();
+      _bus.publish(Event(name: "cognition.thinking.stop", source: name));
     }
   }
 
@@ -131,7 +133,13 @@ class VisionSensor extends LifecycleComponent {
       final description = await _tryGeminiVision(imageFile);
       
       if (description != null) {
-        _publishVisionEvent("Visão Gemini (Imagem Importada):\n$description");
+        _bus.publish(Event(
+          name: "sensor.vision",
+          source: name,
+          data: "Visão Gemini (Imagem Importada):\n$description",
+          priority: 0.9, // Maior prioridade para forçar resposta
+          confidence: 1.0,
+        ));
       } else {
         _publishVisionEvent("Falha ao analisar imagem importada.");
       }
@@ -149,11 +157,18 @@ class VisionSensor extends LifecycleComponent {
 
     if (geminiKey.isEmpty) return "Erro: GEMINI_API_KEY não configurada.";
 
-    final url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$geminiKey";
+    final url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=$geminiKey";
 
     try {
       final bytes = await imageFile.readAsBytes();
       final base64Image = base64Encode(bytes);
+      
+      final extension = p.extension(imageFile.path).toLowerCase();
+      final mimeType = (extension == '.png') ? 'image/png' : 
+                       (extension == '.webp') ? 'image/webp' : 
+                       (extension == '.bmp') ? 'image/bmp' :
+                       (extension == '.heic' || extension == '.heif') ? 'image/heic' :
+                       'image/jpeg';
 
       final response = await http.post(
         Uri.parse(url),
@@ -161,10 +176,10 @@ class VisionSensor extends LifecycleComponent {
         body: jsonEncode({
           "contents": [{
             "parts": [
-              {"text": "Descreva esta imagem de forma detalhada para um sistema cognitivo."},
+              {"text": "Analise esta imagem que o usuário acabou de me enviar. Descreva-a de forma vívida e identifique detalhes relevantes para nossa conversa."},
               {
                 "inline_data": {
-                  "mime_type": "image/jpeg",
+                  "mime_type": mimeType,
                   "data": base64Image
                 }
               }

@@ -42,6 +42,28 @@ class LanguageEngine {
     
     _bus.subscribe("cognition.speaking.start", (e) => _isRobotSpeaking = true);
     _bus.subscribe("cognition.speaking.stop", (e) => _isRobotSpeaking = false);
+
+    _bus.subscribe("cognition.request.user_summary", (e) {
+      _handleUserSummaryRequest(List<String>.from(e.data));
+    });
+  }
+
+  void _handleUserSummaryRequest(List<String> facts) async {
+    if (facts.isEmpty) {
+      _publishResponse("Ainda não reuni informações suficientes sobre você para criar um perfil detalhado. Vamos conversar mais?");
+      return;
+    }
+
+    final factsText = facts.map((f) => "- $f").join("\n");
+    final prompt = "Com base nos seguintes fatos que aprendi sobre o usuário, crie um resumo sobre quem ele é para mim:\n\n$factsText";
+
+    _bus.publish(Event(name: "cognition.thinking.start", source: name));
+    try {
+      final response = await _executeFallbackChain(prompt);
+      _publishResponse(response);
+    } finally {
+      _bus.publish(Event(name: "cognition.thinking.stop", source: name));
+    }
   }
 
   void handleEvent(Event event) {
@@ -113,7 +135,7 @@ class LanguageEngine {
         }
       }
       // 3. Reage a percepções ambientais (Luz/Proximidade/Movimento)
-      else if (sourceEvent.name == "cognition.perception.environmental") {
+      else if (sourceEvent.name == "perception.environmental") {
         _bus.publish(Event(
           name: "cognition.learning.fact",
           source: name,

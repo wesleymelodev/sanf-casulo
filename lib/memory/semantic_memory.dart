@@ -52,7 +52,7 @@ class SemanticMemory extends LifecycleComponent {
   final Map<String, SemanticConcept> _concepts = {};
   
   bool _isPruning = false;
-  static const int maxConceptLimit = 10000; // Teto para evitar crash no Windows
+  static const int maxConceptLimit = 20000; // Teto para evitar crash no Windows
 
   SemanticMemory(this._bus, {SemanticMemoryConfig? config})
       : _config = config ?? SemanticMemoryConfig();
@@ -83,11 +83,11 @@ class SemanticMemory extends LifecycleComponent {
     _concepts.clear();
     
     final int totalKeys = _box.length;
-    if (totalKeys > 2000) {
+    if (totalKeys > 20000) {
       debugPrint("SemanticMemory: Base massiva detectada ($totalKeys itens). Carregando apenas o núcleo ativo.");
-      // Pega as últimas 2000 chaves sem converter tudo para lista primeiro
+      // Pega as últimas 20000 chaves sem converter tudo para lista primeiro
       if (!Platform.isWindows) {
-        for (int i = totalKeys - 1; i >= totalKeys - 2000; i--) {
+        for (int i = totalKeys - 1; i >= totalKeys - 20000; i--) {
           final key = _box.keyAt(i);
           _loadSingleConcept(key);
         }

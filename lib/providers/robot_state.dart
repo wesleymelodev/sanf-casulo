@@ -21,6 +21,7 @@ import '../memory/sensory_memory.dart';
 import '../memory/working_memory.dart';
 import '../memory/episodic_memory.dart';
 import '../memory/semantic_memory.dart';
+import '../memory/user_memory.dart';
 import '../cognition/attention.dart';
 import '../cognition/associative_engine.dart';
 import '../cognition/reasoning.dart';
@@ -88,6 +89,7 @@ class RobotState extends ChangeNotifier {
   late final WorkingMemory workingMemory;
   late final EpisodicMemory episodicMemory;
   late final SemanticMemory semanticMemory;
+  late final UserMemory userMemory;
   late final AttentionController attention;
   late final AssociativeEngine associativeEngine;
   late final ReasoningEngine reasoning;
@@ -194,6 +196,7 @@ class RobotState extends ChangeNotifier {
     workingMemory = WorkingMemory(bus);
     episodicMemory = EpisodicMemory(bus);
     semanticMemory = SemanticMemory(bus);
+    userMemory = UserMemory(bus);
 
     attention = AttentionController(bus);
     associativeEngine = AssociativeEngine(bus);
@@ -234,6 +237,7 @@ class RobotState extends ChangeNotifier {
     _register(workingMemory);
     _register(episodicMemory);
     _register(semanticMemory);
+    _register(userMemory);
     _register(attention);
     _register(associativeEngine);
     _register(reasoning);
@@ -322,6 +326,10 @@ class RobotState extends ChangeNotifier {
     bus.subscribe("system.config.history_updated", (e) {
       activeSessionHistory = List<Map<String, String>>.from((e.data as List).map((m) => Map<String, String>.from(m as Map)));
       Hive.box('settings').put('activeSessionHistory', activeSessionHistory);
+    });
+
+    bus.subscribe("sensor.vision", (e) {
+      addMessage("SISTEMA", "[Visão] Ambiente analisado: ${e.data.toString().split('\n').first}");
     });
 
     bus.subscribe("cognition.future_thought", (e) {
@@ -953,6 +961,16 @@ class RobotState extends ChangeNotifier {
       name: "sensor.audio.toggle",
       source: "input_bar",
       priority: 0.5,
+    ));
+  }
+
+  void requestUserSummary() {
+    final facts = userMemory.getAllFacts();
+    bus.publish(Event(
+      name: "cognition.request.user_summary",
+      source: "ui_settings",
+      data: facts,
+      priority: 0.8,
     ));
   }
 

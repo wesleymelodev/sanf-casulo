@@ -34,7 +34,7 @@ class EnvironmentalSensor extends LifecycleComponent {
     if (isSignificant) {
       String description = _getLuxDescription(lux);
       _bus.publish(Event(
-        name: "cognition.perception.environmental",
+        name: "perception.environmental",
         source: name,
         data: "Luminosidade ambiente: $description ($lux lux)",
         priority: (lux < 10 || lux > 5000) ? 0.7 : 0.4
@@ -63,7 +63,7 @@ class EnvironmentalSensor extends LifecycleComponent {
       if (_lastShakeTime == null || now.difference(_lastShakeTime!).inMilliseconds > 1000) {
         _lastShakeTime = now;
         _bus.publish(Event(
-          name: "cognition.perception.environmental",
+          name: "perception.environmental",
           source: name,
           data: "Movimento brusco detectado (Sacudida)",
           priority: 0.8
@@ -77,7 +77,7 @@ class EnvironmentalSensor extends LifecycleComponent {
     if (faceDown != _isFaceDown) {
       _isFaceDown = faceDown;
       _bus.publish(Event(
-        name: "cognition.perception.environmental",
+        name: "perception.environmental",
         source: name,
         data: _isFaceDown ? "Dispositivo virado para baixo (Privacidade)" : "Dispositivo virado para cima",
         priority: _isFaceDown ? 0.9 : 0.5
@@ -105,7 +105,7 @@ class EnvironmentalSensor extends LifecycleComponent {
     if (_lastProximity == null || _lastProximity != cm) {
       String status = cm < 5 ? "Objeto muito próximo detectado" : "Caminho livre";
       _bus.publish(Event(
-        name: "cognition.perception.environmental",
+        name: "perception.environmental",
         source: name,
         data: "Proximidade: $status ($cm cm)",
         priority: cm < 5 ? 0.8 : 0.3
