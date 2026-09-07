@@ -151,8 +151,7 @@ class LanguageEngine {
       // 4. Reage a áudio ambiente
       else if (sourceEvent.name == "sensor.audio") {
         final text = sourceEvent.data.toString().toLowerCase();
-        final vocativos = ["sanf", "surf", "samf", "salf", "nexus", "spectrum", "você", "voce", "ancrolyn"];
-        bool shouldRespond = vocativos.any((v) => text.contains(v)) || text.endsWith("?");
+        bool shouldRespond = SANFIdentity.triggerWords.any((v) => text.contains(v)) || text.endsWith("?");
         
         if (shouldRespond) {
           _processQuery(sourceEvent.data.toString());

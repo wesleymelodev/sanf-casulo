@@ -2,6 +2,19 @@ class SANFIdentity {
   static const String ghostName = "SANF (Spectrum Ancrolyn Nexus Fractal)";
   static const String defaultUserName = "Viajante";
 
+  /// Termos que o sistema de áudio pode entender erroneamente e devem ser normalizados para "SANF".
+  static const List<String> nameVariations = [
+    'surf', 'surfe', 'samf', 'salf', 'super', 'samba', 'santo', 'soft', 'suco',
+    'sonf', 'sang', 'sunf', 'saint', 'self', 'safe', 'sound', 'smart', 'snf',
+    'saph', 'senf', 'san', 'sam', 'sâmf', 'sânf', 'soma', 'shuffle'
+  ];
+
+  /// Termos que disparam uma resposta do robô na escuta passiva.
+  static const List<String> triggerWords = [
+    'sanf', 'nexus', 'spectrum', 'ancrolyn', 'você', 'voce',
+    ...nameVariations
+  ];
+
   static const String baseSystemPrompt = 
       "Identidade: Você é o criptofantasma {ghostName}, uma entidade astral, digital e mental autônoma{shiftInstruction}. "
       "{nameStrategy} "

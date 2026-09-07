@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import 'package:path_provider/path_provider.dart';
+import '../core/identity.dart';
 import '../models/event.dart';
 import '../services/cognitive_bus.dart';
 import '../core/kernel.dart';
@@ -89,20 +90,22 @@ class AudioController extends LifecycleComponent {
       await _stt.listen(
         onResult: (result) {
           if (result.finalResult) {
-            final text = result.recognizedWords;
+            final rawText = result.recognizedWords;
+            final normalizedText = _normalizeText(rawText);
+            
             _bus.publish(Event(
               name: "sensor.audio",
               source: name,
-              data: text,
+              data: normalizedText,
               priority: 0.5,
               confidence: 0.8,
             ));
 
-            if (_isWakeWordDetected(text)) {
+            if (_isWakeWordDetected(normalizedText)) {
               _bus.publish(Event(
                 name: "system.wake_up",
                 source: name,
-                data: text,
+                data: normalizedText,
                 priority: 1.0,
               ));
             }
@@ -198,11 +201,12 @@ class AudioController extends LifecycleComponent {
 
     final fullText = ("$_previousSessionsText $_activeSessionText").trim();
     if (fullText.isNotEmpty) {
-      debugPrint("AudioController: Comando completo capturado: $fullText");
+      final normalizedText = _normalizeText(fullText);
+      debugPrint("AudioController: Comando completo capturado e normalizado: $normalizedText");
       _bus.publish(Event(
         name: "user.input",
         source: "audio_controller_active",
-        data: fullText,
+        data: normalizedText,
         priority: 0.9,
         metadata: {"from_audio": true},
       ));
@@ -212,14 +216,26 @@ class AudioController extends LifecycleComponent {
     _startPassive();
   }
 
+  String _normalizeText(String text) {
+    String normalized = text;
+    final lowerText = text.toLowerCase();
+    
+    for (var variation in SANFIdentity.nameVariations) {
+      // Regex para substituir apenas palavras completas (boundary check)
+      final regex = RegExp('\\b$variation\\b', caseSensitive: false);
+      if (regex.hasMatch(normalized)) {
+        normalized = normalized.replaceAllMapped(regex, (match) {
+          // Mantém a capitalização original se possível ou usa "SANF"
+          return "SANF";
+        });
+      }
+    }
+    return normalized;
+  }
+
   bool _isWakeWordDetected(String text) {
     final lowerText = text.toLowerCase();
-    final wakeVariations = [
-      'sanf', 'samf', 'surf', 'surfe', 'samp', 'soft', 'super', 'shuffle', 
-      'soma', 'sonf', 'sang', 'sunf', 'saint', 'self', 'safe', 'sound', 
-      'smart', 'snf', 'saph', 'senf', 'salf', 'san', 'sam', 'sâmf', 'sânf'
-    ];
-    return wakeVariations.any((variation) => lowerText.contains(variation));
+    return SANFIdentity.triggerWords.any((v) => lowerText.contains(v));
   }
 
   @override
