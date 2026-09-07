@@ -403,6 +403,12 @@ class RobotState extends ChangeNotifier {
       data: selfModification,
       priority: 1.0,
     ));
+    bus.publish(Event(
+      name: "system.config.keys_changed",
+      source: "kernel_boot",
+      data: {"gemini": webGeminiKey, "groq": webGroqKey},
+      priority: 1.0,
+    ));
   }
 
   void setModelTemperature(double val) {

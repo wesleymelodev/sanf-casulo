@@ -3,8 +3,42 @@ import 'package:provider/provider.dart';
 import '../providers/robot_state.dart';
 import 'help_section.dart';
 
-class SettingsDrawer extends StatelessWidget {
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/robot_state.dart';
+import 'help_section.dart';
+
+class SettingsDrawer extends StatefulWidget {
   const SettingsDrawer({super.key});
+
+  @override
+  State<SettingsDrawer> createState() => _SettingsDrawerState();
+}
+
+class _SettingsDrawerState extends State<SettingsDrawer> {
+  late TextEditingController _userNameController;
+  late TextEditingController _ghostNameController;
+  late TextEditingController _geminiKeyController;
+  late TextEditingController _groqKeyController;
+
+  @override
+  void initState() {
+    super.initState();
+    final state = context.read<RobotState>();
+    _userNameController = TextEditingController(text: state.userName);
+    _ghostNameController = TextEditingController(text: state.ghostName);
+    _geminiKeyController = TextEditingController(text: state.webGeminiKey);
+    _groqKeyController = TextEditingController(text: state.webGroqKey);
+  }
+
+  @override
+  void dispose() {
+    _userNameController.dispose();
+    _ghostNameController.dispose();
+    _geminiKeyController.dispose();
+    _groqKeyController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -114,7 +148,7 @@ class SettingsDrawer extends StatelessWidget {
                     ),
                     const SizedBox(height: 10),
                     TextField(
-                      decoration: _inputDecoration("Como devo te chamar?", state.userName),
+                      decoration: _inputDecoration("Como devo te chamar?", null),
                       style: const TextStyle(color: Colors.cyanAccent),
                       onSubmitted: (val) {
                         final cleanName = val.trim();
@@ -122,7 +156,7 @@ class SettingsDrawer extends StatelessWidget {
                           state.setUserName(cleanName);
                         }
                       },
-                      controller: TextEditingController(text: state.userName),
+                      controller: _userNameController,
                     ),
                     const SizedBox(height: 5),
                     const Text(
@@ -134,12 +168,12 @@ class SettingsDrawer extends StatelessWidget {
 
                     // --- NOME DO FANTASMA (BOT) ---
                     const Text(
-                      "Identidade do Sistema",
+                      "Identidade do Systema",
                       style: TextStyle(color: Colors.white, fontSize: 16),
                     ),
                     const SizedBox(height: 10),
                     TextField(
-                      decoration: _inputDecoration("Nome do Ghost", state.ghostName),
+                      decoration: _inputDecoration("Nome do Ghost", null),
                       style: const TextStyle(color: Colors.yellowAccent),
                       onSubmitted: (val) {
                         final cleanName = val.trim();
@@ -147,7 +181,7 @@ class SettingsDrawer extends StatelessWidget {
                           state.setGhostName(cleanName);
                         }
                       },
-                      controller: TextEditingController(text: state.ghostName),
+                      controller: _ghostNameController,
                     ),
                     const SizedBox(height: 5),
                     const Text(
@@ -187,9 +221,9 @@ class SettingsDrawer extends StatelessWidget {
                     ),
                     const SizedBox(height: 20),
 
-                    _buildKeyField("Gemini API Key", state.webGeminiKey, (v) => state.setWebGeminiKey(v)),
+                    _buildKeyField("Gemini API Key", _geminiKeyController, (v) => state.setWebGeminiKey(v)),
                     const SizedBox(height: 20),
-                    _buildKeyField("Groq API Key", state.webGroqKey, (v) => state.setWebGroqKey(v)),
+                    _buildKeyField("Groq API Key", _groqKeyController, (v) => state.setWebGroqKey(v)),
                     const SizedBox(height: 20),
                     
                     const Text(
@@ -238,7 +272,7 @@ class SettingsDrawer extends StatelessWidget {
     );
   }
 
-  Widget _buildKeyField(String label, String value, Function(String) onSave) {
+  Widget _buildKeyField(String label, TextEditingController controller, Function(String) onSave) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -246,10 +280,10 @@ class SettingsDrawer extends StatelessWidget {
         const SizedBox(height: 8),
         TextField(
           obscureText: true,
-          decoration: _inputDecoration(label, value),
+          decoration: _inputDecoration(label, null),
           style: const TextStyle(color: Colors.white70),
           onSubmitted: onSave,
-          controller: TextEditingController(text: value),
+          controller: controller,
         ),
       ],
     );

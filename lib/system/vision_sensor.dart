@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
-import 'package:google_mlkit_object_detection/google_mlkit_object_detection.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
@@ -17,7 +16,6 @@ class VisionSensor extends LifecycleComponent {
 
   final CognitiveBus _bus;
   bool _isCapturing = false;
-  ObjectDetector? _objectDetector;
   String _dynamicGeminiKey = "";
 
   VisionSensor(this._bus);
@@ -28,8 +26,7 @@ class VisionSensor extends LifecycleComponent {
       debugPrint("VisionSensor: Desativado no Windows por compatibilidade.");
       return;
     }
-    debugPrint("VisionSensor inicializado (Modo Local/Privacidade).");
-    _initDetector();
+    debugPrint("VisionSensor inicializado (Modo API).");
     _bus.subscribe("vision.trigger.manual", (e) => _captureAndAnalyze());
     _bus.subscribe("vision.analyze_file", (e) {
       if (e.data is File) {
@@ -44,40 +41,8 @@ class VisionSensor extends LifecycleComponent {
     });
   }
 
-  Future<void> _initDetector() async {
-    try {
-      // Detector TFLite Customizado (Apenas Android)
-      if (!kIsWeb && Platform.isAndroid) {
-        final directory = await getExternalStorageDirectory();
-        final modelPath = p.join(directory!.path, 'gemma3-1B-it-int4.tflite');
-
-        if (await File(modelPath).exists()) {
-          final options = LocalObjectDetectorOptions(
-            mode: DetectionMode.single,
-            modelPath: modelPath,
-            classifyObjects: true,
-            multipleObjects: true,
-          );
-          _objectDetector = ObjectDetector(options: options);
-          debugPrint("Vision: Detector Local (Gemma TFLite) carregado.");
-        } else {
-          debugPrint("Vision: Usando Detector Base do Google (Offline).");
-          _objectDetector = ObjectDetector(options: ObjectDetectorOptions(
-            mode: DetectionMode.single,
-            classifyObjects: true,
-            multipleObjects: true,
-          ));
-        }
-      } else {
-        debugPrint("Vision: Sensores visuais ativos em modo passivo (Desktop).");
-      }
-    } catch (e) {
-      debugPrint("Erro ao inicializar detector visual: $e");
-    }
-  }
-
   Future<void> _captureAndAnalyze() async {
-    if (_isCapturing || _objectDetector == null) return;
+    if (_isCapturing) return;
     _isCapturing = true;
     _bus.publish(Event(name: "cognition.thinking.start", source: name));
 
@@ -86,7 +51,10 @@ class VisionSensor extends LifecycleComponent {
     try {
       debugPrint("Vision: Ativando hardware local...");
       final cameras = await availableCameras();
-      if (cameras.isEmpty) return;
+      if (cameras.isEmpty) {
+        _publishVisionEvent("Nenhuma câmera detectada no hardware.");
+        return;
+      }
 
       controller = CameraController(cameras.first, ResolutionPreset.medium, enableAudio: false);
       await controller.initialize();
@@ -96,30 +64,22 @@ class VisionSensor extends LifecycleComponent {
       await controller.dispose();
       controller = null;
 
-      final inputImage = InputImage.fromFilePath(image.path);
-      final List<DetectedObject> objects = await _objectDetector!.processImage(inputImage);
+      final File imageFile = File(image.path);
+      final description = await _tryGeminiVision(imageFile);
 
-      String description = _formatDescription(objects);
-      _publishVisionEvent(description);
+      if (description != null) {
+        _publishVisionEvent("Análise Visual (API):\n$description");
+      } else {
+        _publishVisionEvent("Falha ao analisar o ambiente via API.");
+      }
       
     } catch (e) {
-      debugPrint("Erro na visão local: $e");
+      debugPrint("Erro na visão via API: $e");
     } finally {
       _isCapturing = false;
       if (controller != null) await controller.dispose();
       _bus.publish(Event(name: "cognition.thinking.stop", source: name));
     }
-  }
-
-  String _formatDescription(List<DetectedObject> objects) {
-    if (objects.isEmpty) return "Ambiente observado, nenhum objeto específico identificado.";
-    
-    final labels = objects.map((obj) {
-      final label = obj.labels.isNotEmpty ? obj.labels.first.text : "objeto desconhecido";
-      return "- $label (confiança: ${(obj.labels.isNotEmpty ? obj.labels.first.confidence * 100 : 0).toStringAsFixed(0)}%)";
-    }).join("\n");
-
-    return "Análise Visual Local:\n$labels";
   }
 
   Future<void> analyzeImportedImage(File imageFile) async {
@@ -213,7 +173,5 @@ class VisionSensor extends LifecycleComponent {
   void update(double deltaTime) {}
 
   @override
-  void shutdown() {
-    _objectDetector?.close();
-  }
+  void shutdown() {}
 }

@@ -50,7 +50,6 @@ dependencies:
   path: ^1.9.0
   flutter_local_notifications: ^17.2.3
   workmanager: ^0.10.7
-  google_mlkit_object_detection: ^0.16.0
   firebase_core: ^4.13.0
   firebase_database: ^12.4.7
   firebase_auth: ^6.5.7
