@@ -32,6 +32,13 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
   }
 
   @override
+  void didUpdateWidget(SettingsDrawer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // IMPORTANTE: Não atualizamos os controllers aqui para não perder o cursor ou bloquear a digitação.
+    // Os controllers só devem ser atualizados se o estado externo mudar drasticamente (boot/sync).
+  }
+
+  @override
   void dispose() {
     _userNameController.dispose();
     _ghostNameController.dispose();

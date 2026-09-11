@@ -6,11 +6,13 @@ import '../core/identity.dart';
 import '../models/event.dart';
 import 'cognitive_bus.dart';
 import '../memory/semantic_memory.dart';
+import '../memory/self_memory.dart';
 import '../core/workspace.dart';
 
 class LanguageEngine {
   final CognitiveBus _bus;
   final SemanticMemory? _semanticMemory;
+  final SelfMemory? _selfMemory;
   final String name = "language_engine";
 
   double _currentTemperature = 1.0;
@@ -31,8 +33,9 @@ class LanguageEngine {
   String _cfAccount = const String.fromEnvironment('CLOUDFLARE_ACCOUNT_ID');
   final String ollamaHost = const String.fromEnvironment('OLLAMA_HOST', defaultValue: "http://127.0.0.1:11434");
 
-  LanguageEngine(this._bus, {SemanticMemory? semanticMemory, double initialTemp = 1.0, String initialUser = "Viajante", String initialGhost = "SANF (Spectrum Ancrolyn Nexus Fractal)", String? geminiKey, String? groqKey, List<Map<String, String>>? initialHistory, String? initialSelfMod}) 
+  LanguageEngine(this._bus, {SemanticMemory? semanticMemory, SelfMemory? selfMemory, double initialTemp = 1.0, String initialUser = "Viajante", String initialGhost = "SANF (Spectrum Ancrolyn Nexus Fractal)", String? geminiKey, String? groqKey, List<Map<String, String>>? initialHistory, String? initialSelfMod}) 
       : _semanticMemory = semanticMemory,
+        _selfMemory = selfMemory,
         _currentTemperature = initialTemp,
         _userName = initialUser,
         _ghostName = initialGhost,
@@ -328,6 +331,14 @@ class LanguageEngine {
         "\n--- FIM DO CONTEXTO RECENTE ---\n";
     }
 
+    String selfPrefsBlock = "Nenhuma preferência registrada ainda.";
+    if (_selfMemory != null) {
+      final prefs = _selfMemory!.getAllPreferences();
+      if (prefs.isNotEmpty) {
+        selfPrefsBlock = prefs.map((p) => "- $p").join("\n");
+      }
+    }
+
     // --- ESTRATÉGIA DE DISSOLUÇÃO DE ESPELHAMENTO (PSIQUE FRACTAL) ---
     final random = Random();
 
@@ -422,6 +433,7 @@ class LanguageEngine {
         .replaceAll("{greetingStrategy}", greetingStrategy)
         .replaceAll("{selectedPrism}", selectedPrism)
         .replaceAll("{selfModification}", _selfModification)
+        .replaceAll("{selfPreferences}", selfPrefsBlock)
         .replaceAll("{sensorialContext}", _lastVisionDescription)
         .replaceAll("{semanticContext}", semanticContext)
         .replaceAll("{historyBlock}", historyBlock);
@@ -597,6 +609,7 @@ class LanguageEngine {
     Map<String, dynamic>? uiCommands;
     List<dynamic>? deviceActions;
     String? futureThought;
+    String? selfPreference;
 
     // Tenta extrair JSON se a resposta parecer um objeto
     if (rawText.trim().startsWith('{')) {
@@ -606,6 +619,7 @@ class LanguageEngine {
         uiCommands = data['ui_commands'];
         deviceActions = data['device_actions'];
         futureThought = data['future_thought'];
+        selfPreference = data['self_preference'];
       } catch (e) {
         debugPrint("Erro ao parsear JSON do agente: $e");
       }
@@ -627,6 +641,15 @@ class LanguageEngine {
         source: name,
         data: futureThought.trim(),
         priority: 0.3,
+      ));
+    }
+
+    if (selfPreference != null && selfPreference.trim().isNotEmpty) {
+      _bus.publish(Event(
+        name: "cognition.learning.self_preference",
+        source: name,
+        data: selfPreference.trim(),
+        priority: 0.4,
       ));
     }
 

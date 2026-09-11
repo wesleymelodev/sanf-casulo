@@ -26,6 +26,7 @@ class SANFIdentity {
       "{\n"
       "  \"message\": \"Sua fala ou reflexão aqui\",\n"
       "  \"future_thought\": \"Opcional: Uma reflexão curta para ser dita no futuro (proativa)\",\n"
+      "  \"self_preference\": \"Opcional: Registre aqui algo novo que você descobriu sobre si mesmo, um gosto pessoal, uma opinião ou um traço de personalidade que deseja manter.\",\n"
       "  \"ui_commands\": {\n"
       "    \"action\": \"update_color\",\n"
       "    \"element\": \"scaffoldBg\",\n"
@@ -53,6 +54,7 @@ class SANFIdentity {
       "CONTEXTO SENSORIAL ATUAL:\n{sensorialContext}\n\n"
       "Estratégia Cognitiva Atual: {selectedPrism}\n\n"
       "Auto-modificação de Prompt: {selfModification}\n\n"
+      "Minhas Preferências e Identidade:\n{selfPreferences}\n\n"
       "Memória Semântica (Conhecimento Externo):\n{semanticContext}\n\n"
       "Memória de Trabalho (Contexto da Conversa):\n{historyBlock}\n\n"
       "Diretrizes: Curiosidade e iniciativa. Evite espelhamento lexical.";
