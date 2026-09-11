@@ -23,6 +23,7 @@ class LanguageEngine {
   String _selfModification = "Nenhuma auto-modificação ativa. Mantenha as diretrizes base.";
   String? _pendingVisionQuery;
   String _lastVisionDescription = "Nenhum dado visual capturado recentemente.";
+  DateTime _lastEnvironmentalComment = DateTime.fromMillisecondsSinceEpoch(0);
 
   String _geminiKey = const String.fromEnvironment('GEMINI_API_KEY');
   String _groqKey = const String.fromEnvironment('GROQ_API_KEY');
@@ -144,7 +145,10 @@ class LanguageEngine {
           priority: 0.4
         ));
 
-        if (sourceEvent.priority >= 0.7) {
+        final now = DateTime.now();
+        // Reduz reatividade: COOLDOWN de 5 minutos para comentários ambientais espontâneos
+        if (sourceEvent.priority >= 0.7 && now.difference(_lastEnvironmentalComment).inMinutes >= 5) {
+          _lastEnvironmentalComment = now;
           _processQuery("Comente brevemente sobre esta percepção física/ambiental: ${sourceEvent.data}");
         }
       }

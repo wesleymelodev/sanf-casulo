@@ -28,8 +28,15 @@ class EnvironmentalSensor extends LifecycleComponent {
   void _onLightChanged(Event event) {
     final double lux = (event.data as num).toDouble();
     
-    // Filtro de relevância
-    bool isSignificant = _lastLux == null || (lux - _lastLux!).abs() > 200 || (lux < 10 && _lastLux! >= 10) || (lux > 1000 && _lastLux! <= 1000);
+    if (_lastLux == null) {
+      _lastLux = lux;
+      return; // Silêncio no primeiro frame para estabilização
+    }
+
+    // Filtro de relevância mais rigoroso e com histerese
+    bool isSignificant = (lux - _lastLux!).abs() > 500 || 
+                         (lux < 5 && _lastLux! >= 5) || 
+                         (lux > 2000 && _lastLux! <= 2000);
     
     if (isSignificant) {
       String description = _getLuxDescription(lux);
